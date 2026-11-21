@@ -90,6 +90,8 @@
 
     const periodInput = $("#period-input");
     if (periodInput && periodInput.value !== FM.store.ui.month) periodInput.value = FM.store.ui.month;
+    const periodText = $("#period-text");
+    if (periodText) periodText.textContent = monthLabel(FM.store.ui.month, "long");
   }
 
   function render() {
@@ -186,6 +188,11 @@
         if (/^\d{4}-\d{2}$/.test(input.value)) {
           FM.store.setMonth(input.value);
           render();
+        }
+      });
+      input.addEventListener("click", () => {
+        if (typeof input.showPicker === "function") {
+          try { input.showPicker(); } catch (e) {}
         }
       });
     }
