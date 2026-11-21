@@ -131,7 +131,14 @@ input, select, textarea { font-family: inherit; font-size: 14px; color: var(--te
 /* =========================================================
    Shell
    ========================================================= */
-.app-shell { display: flex; min-height: 100vh; }
+.app-shell { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  background: url("../img/luvis-finance.png") center/cover no-repeat;
+  opacity: .15; pointer-events: none;
+}
+html[data-theme="light"] body::before { opacity: .05; }
 
 .sidebar {
   width: var(--sidebar-w);
@@ -153,11 +160,9 @@ input, select, textarea { font-family: inherit; font-size: 14px; color: var(--te
 }
 .logo-mark {
   width: 42px; height: 42px; border-radius: 13px;
-  display: grid; place-items: center;
-  font-weight: 800; font-size: 14px; letter-spacing: -.4px;
-  color: #071023;
-  background: linear-gradient(135deg, #9aa7ff 0%, #7c8cff 38%, #2ed3a0 100%);
-  box-shadow: 0 10px 24px -10px rgba(124, 140, 255, .7);
+  object-fit: cover; display: block;
+  border: 1px solid rgba(255, 196, 92, .25);
+  box-shadow: 0 10px 24px -10px rgba(255, 196, 92, .55);
   flex: 0 0 auto;
 }
 .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
