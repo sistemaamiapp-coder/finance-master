@@ -139,8 +139,8 @@ body::before {
   opacity: .15; pointer-events: none;
 }
 html[data-theme="light"] body::before {
-  opacity: .12;
-  filter: invert(1) hue-rotate(180deg) brightness(1.25) saturate(.8);
+  background-image: url("../img/luvis-finance-light.png");
+  opacity: .18;
 }
 
 .sidebar {
@@ -167,6 +167,13 @@ html[data-theme="light"] body::before {
   border: 1px solid rgba(255, 196, 92, .25);
   box-shadow: 0 10px 24px -10px rgba(255, 196, 92, .55);
   flex: 0 0 auto;
+}
+.logo-mark-light { display: none; }
+html[data-theme="light"] .logo-mark-dark { display: none; }
+html[data-theme="light"] .logo-mark-light {
+  display: block;
+  border-color: rgba(214, 158, 20, .35);
+  box-shadow: 0 10px 22px -12px rgba(255, 170, 32, .5);
 }
 .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
 .brand-text strong { font-size: 15.5px; letter-spacing: -.02em; }
