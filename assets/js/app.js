@@ -45,14 +45,14 @@
   function updateChrome() {
     const state = FM.store.state;
     const meta = state.meta || {};
-    const org = meta.org || "Minha organização";
+    const org = meta.org || "Luvis Finance";
 
     const orgName = $("#org-name");
     if (orgName) orgName.textContent = org;
     const avatar = $("#org-avatar");
     if (avatar) {
       const initials = org.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-      avatar.textContent = initials || "FM";
+      avatar.textContent = initials || "LF";
     }
 
     const calc = FM.calc;
@@ -108,7 +108,7 @@
     const subEl = $("#page-sub");
     if (titleEl) titleEl.textContent = meta.title;
     if (subEl) subEl.textContent = meta.sub;
-    document.title = `${meta.title} — Finance Master`;
+    document.title = `${meta.title} — Luvis Finance`;
 
     const period = $("#period-control");
     if (period) period.hidden = !meta.period;

@@ -298,7 +298,7 @@
 
     return {
       version: VERSION,
-      meta: { org: "Ministério AMI", theme: "dark", createdAt: now, updatedAt: now },
+      meta: { org: "Luvis Finance", theme: "dark", createdAt: now, updatedAt: now },
       accounts, categories, costCenters, transactions, transfers,
       budgets, reconciliations, installmentGroups,
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
@@ -309,7 +309,7 @@
   function emptyState(theme) {
     return {
       version: VERSION,
-      meta: { org: "Minha organização", theme: theme || "dark", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      meta: { org: "Luvis Finance", theme: theme || "dark", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
       accounts: [], categories: [], costCenters: [], transactions: [], transfers: [],
       budgets: [], reconciliations: [], installmentGroups: [],
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
@@ -335,7 +335,9 @@
       }
       // normalização defensiva
       loaded.settings = Object.assign({}, DEFAULT_LISTS, loaded.settings || {});
-      loaded.meta = Object.assign({ org: "Minha organização", theme: "dark" }, loaded.meta || {});
+      loaded.meta = Object.assign({ org: "Luvis Finance", theme: "dark" }, loaded.meta || {});
+      const legacyOrg = ["Ministério AMI", "Minha organização"];
+      if (!loaded.meta.org || legacyOrg.includes(loaded.meta.org)) loaded.meta.org = "Luvis Finance";
       loaded.audit = loaded.audit || [];
       loaded.installmentGroups = loaded.installmentGroups || [];
       this.state = loaded;
@@ -396,7 +398,7 @@
 
     exportJSON() {
       const blob = new Blob([JSON.stringify(this.state, null, 2)], { type: "application/json" });
-      const name = `finance-master-backup-${todayISO()}.json`;
+      const name = `luvis-finance-backup-${todayISO()}.json`;
       downloadFile(blob, name);
     },
     importJSON(text) {
@@ -407,7 +409,7 @@
       }
       data.version = VERSION;
       data.settings = Object.assign({}, DEFAULT_LISTS, data.settings || {});
-      data.meta = Object.assign({ org: "Minha organização", theme: this.theme() }, data.meta || {});
+      data.meta = Object.assign({ org: "Luvis Finance", theme: this.theme() }, data.meta || {});
       data.audit = data.audit || [];
       data.installmentGroups = data.installmentGroups || [];
       this.state = data;
@@ -1163,7 +1165,7 @@
     },
 
     updateOrg(name) {
-      store.state.meta.org = String(name || "").trim() || "Minha organização";
+      store.state.meta.org = String(name || "").trim() || "Luvis Finance";
       store.addAudit("Organização atualizada", "Sistema", "—", store.state.meta.org);
       store.save();
     },

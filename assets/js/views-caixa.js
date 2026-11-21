@@ -233,7 +233,7 @@
             <button class="btn ghost sm" id="flow-export">${icon("download")}Exportar</button>
           </div>
         </div>
-        <div class="print-head"><strong>Fluxo de caixa — ${esc(monthLabel(ctx.month, "long"))}</strong><span>Finance Master · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Fluxo de caixa — ${esc(monthLabel(ctx.month, "long"))}</strong><span>Luvis Finance · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="kpi-grid">
           <article class="kpi hero">
@@ -340,7 +340,7 @@
 
     mount.querySelector("#flow-print").addEventListener("click", () => window.print());
     mount.querySelector("#flow-export").addEventListener("click", () => {
-      U.downloadCSV(`finance-master-fluxo-${ctx.month}.csv`,
+      U.downloadCSV(`luvis-finance-fluxo-${ctx.month}.csv`,
         ["Mês", "Receitas recebidas", "Despesas pagas", "Resultado", "A receber", "A pagar", "Saldo projetado"],
         stats.map((s) => [monthLabel(s.key, "long"), money(s.receitasRecebidas), money(s.despesasPagas), money(s.resultado), money(s.entradasPrevistas), money(s.saidasPrevistas), money(projMap[s.key])]));
       FM.ui.toast("Fluxo de caixa exportado em CSV.");

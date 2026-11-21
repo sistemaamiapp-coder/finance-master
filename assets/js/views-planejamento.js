@@ -523,7 +523,7 @@
             <button class="btn ghost sm" id="dre-export">${icon("download")}Exportar</button>
           </div>
         </div>
-        <div class="print-head"><strong>DRE gerencial — ${esc(monthLabel(month, "long"))}</strong><span>Finance Master · regime de caixa · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>DRE gerencial — ${esc(monthLabel(month, "long"))}</strong><span>Luvis Finance · regime de caixa · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="grid grid-3">
           <article class="kpi">
@@ -631,7 +631,7 @@
         ["Centro de custo", "Receitas", "Despesas", "Resultado"],
         ...ccRows.map((c) => [c.name, money(c.rec), money(c.desp), money(c.rec - c.desp)]),
       ];
-      U.downloadCSV(`finance-master-dre-${month}.csv`, ["Indicador", "Valor"], rows);
+      U.downloadCSV(`luvis-finance-dre-${month}.csv`, ["Indicador", "Valor"], rows);
       FM.ui.toast("DRE exportado em CSV.");
     });
   };
@@ -731,7 +731,7 @@
     mount.querySelectorAll("[data-report]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const kind = btn.dataset.report;
-        let filename = `finance-master-${kind}-${month}.csv`;
+        let filename = `luvis-finance-${kind}-${month}.csv`;
         let headers = ["Indicador", "Valor"];
         let rows = [];
         if (kind === "resumo") {
@@ -758,7 +758,7 @@
         } else if (kind === "categorias") {
           headers = ["Tipo", "Categoria", "Valor realizado", "Lançamentos"];
           rows = income.map((c) => ["Receita", c.name, money(c.total), c.count]).concat(spend.map((c) => ["Despesa", c.name, money(c.total), c.count]));
-          filename = `finance-master-categorias-${month}.csv`;
+          filename = `luvis-finance-categorias-${month}.csv`;
         } else if (kind === "orcamento") {
           headers = ["Categoria", "Centro de custo", "Planejado", "Realizado", "Disponível", "Uso %"];
           rows = budgets.rows.map((r) => [r.category, r.costCenter || "Todos", money(r.planned), money(r.actual), money(r.remaining), pct(r.usage)]);
@@ -789,12 +789,12 @@
           <div><h2>Guia de uso e dicas</h2><p>Regras do sistema, rotinas de controle e roteiro de evolução para ${esc(org)}.</p></div>
           <div class="content-actions"><button class="btn ghost sm" id="guide-print">${icon("printer")}Imprimir guia</button></div>
         </div>
-        <div class="print-head"><strong>Guia de uso — Finance Master</strong><span>${esc(org)} · ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Guia de uso — Luvis Finance</strong><span>${esc(org)} · ${fmtDate(todayISO())}</span></div>
 
         <div class="guide-grid">
           <section class="card guide-card">
             <h3>${icon("sparkles")}Como o sistema pensa</h3>
-            <p>O Finance Master usa uma <b>base central de lançamentos</b>. Contas a pagar/receber, DRE, fluxo e relatórios são visões derivadas — nunca digite o mesmo fato em dois lugares.</p>
+            <p>O Luvis Finance usa uma <b>base central de lançamentos</b>. Contas a pagar/receber, DRE, fluxo e relatórios são visões derivadas — nunca digite o mesmo fato em dois lugares.</p>
             <ul>
               <li><b>Status automático</b>: sem baixa e vencimento futuro = Previsto; sem baixa e vencido = Atrasado; com baixa parcial = Parcial; quitado = Pago/Recebido; cancelado preserva histórico.</li>
               <li><b>Baixa</b> é o momento em que o dinheiro se move. Só a baixa altera saldo e resultado realizado.</li>

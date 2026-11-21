@@ -305,7 +305,7 @@
         ["Orçamento", "Planejado", "Realizado"],
         ...budgets.map((b) => [`${b.category} (${b.costCenter})`, money(b.planned), money(b.actual)]),
       ];
-      U.downloadCSV(`finance-master-resumo-${month}.csv`, ["Resumo financeiro Finance Master"], rows);
+      U.downloadCSV(`luvis-finance-resumo-${month}.csv`, ["Resumo financeiro Luvis Finance"], rows);
       FM.ui.toast("Resumo exportado em CSV.", "success");
     });
   };

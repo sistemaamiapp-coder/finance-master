@@ -115,6 +115,13 @@ input, select, textarea { font-family: inherit; font-size: 14px; color: var(--te
 ::selection { background: var(--primary-soft); color: var(--text); }
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+.icon {
+  width: 18px; height: 18px;
+  fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.icon.sm { width: 15px; height: 15px; }
+
 /* Scrollbars */
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }

@@ -188,7 +188,7 @@
         fmtDate(t.dueDate), fmtDate(t.paidDate), FM.calc.effectiveStatus(t),
         t.method, U.num(t.amount).toFixed(2).replace(".", ","), FM.calc.remaining(t).toFixed(2).replace(".", ","), t.note,
       ]);
-      U.downloadCSV(`finance-master-lancamentos-${ctx.month}.csv`,
+      U.downloadCSV(`luvis-finance-lancamentos-${ctx.month}.csv`,
         ["ID", "Data", "Tipo", "Descrição", "Categoria", "Conta", "Centro de custo", "Vencimento", "Baixa", "Status", "Forma", "Valor", "Em aberto", "Observação"],
         rows);
       FM.ui.toast("Lançamentos exportados em CSV.");
@@ -320,7 +320,7 @@
         });
       });
       mount.querySelector("#pend-export").addEventListener("click", () => {
-        U.downloadCSV(`finance-master-${isRec ? "a-receber" : "a-pagar"}.csv`,
+        U.downloadCSV(`luvis-finance-${isRec ? "a-receber" : "a-pagar"}.csv`,
           ["Vencimento", "Descrição", "Categoria", "Conta", "Valor", "Baixado", "Em aberto", "Status"],
           visible.map((t) => [fmtDate(t.dueDate), t.description, `${t.category} › ${t.subcategory}`, C.accountName(t.account), money(t.amount), money(C.paidTotal(t)), money(C.remaining(t)), C.effectiveStatus(t)]));
         FM.ui.toast("Arquivo CSV exportado.");
