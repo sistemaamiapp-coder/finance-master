@@ -138,7 +138,10 @@ body::before {
   background: url("../img/luvis-finance.png") center/cover no-repeat;
   opacity: .15; pointer-events: none;
 }
-html[data-theme="light"] body::before { opacity: .05; }
+html[data-theme="light"] body::before {
+  opacity: .12;
+  filter: invert(1) hue-rotate(180deg) brightness(1.25) saturate(.8);
+}
 
 .sidebar {
   width: var(--sidebar-w);
