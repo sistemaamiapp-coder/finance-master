@@ -1,12 +1,12 @@
 /* =========================================================
-   FINANCE MASTER — store, cálculos e regras de negócio
+   LIVIS FINANCE — store, cálculos e regras de negócio
    ========================================================= */
 (function () {
   "use strict";
   const FM = (window.FM = window.FM || {});
-  const KEY = "finance_master.v1";
-  const UI_KEY = "finance_master.ui.v1";
-  const VERSION = 1;
+  const KEY = "livis_finance.v2";
+  const UI_KEY = "livis_finance.ui.v2";
+  const VERSION = 2;
 
   /* ---------------- utilities ---------------- */
   const pad = (n) => String(n).padStart(2, "0");
@@ -146,170 +146,262 @@
 
   /* ---------------- seed ---------------- */
   const DEFAULT_LISTS = {
-    methods: ["PIX", "Dinheiro", "Cartão", "Boleto", "Transferência"],
+    methods: ["Débito", "Crédito 1", "Crédito 2", "Crédito 3", "Crédito 4", "PIX", "Dinheiro", "Boleto", "Transferência"],
     periodicities: ["Única", "Semanal", "Mensal", "Anual"],
     types: ["Receita", "Despesa"],
     statuses: ["Previsto", "Pago", "Recebido", "Parcial", "Atrasado", "Cancelado"],
+    sections: ["Contas fixas", "Gastos do mês", "Cartão de crédito", "Entradas", "Investimento"],
   };
+
+  const CATEGORY_DEFS = [
+    ["Mercado", "Alimentos, bebidas, itens de limpeza da casa etc. comprados no mercado."],
+    ["Necessidades", "Itens de farmácia, de higiene pessoal ou da casa."],
+    ["Eletrônicos", "Computador, celular, notebook, conserto de eletrônicos e relógio."],
+    ["Assinaturas", "Assinaturas como Prime, Netflix e Google+."],
+    ["Roupa", "Roupas, calçados e qualquer tipo de vestimenta."],
+    ["Beleza", "Maquiagem, manicure, salão e cremes específicos para o cabelo."],
+    ["Presentes", "Presentes para amigos, familiares e namorados ou namoradas."],
+    ["Saúde", "Suplementos, academia e consultas ao médico."],
+    ["Despesas eventuais", "Consultas não planejadas, veterinários, conserto do carro e imprevistos."],
+    ["Desenvolvimento", "Cursos, livros, planners e desenvolvimento pessoal."],
+    ["Uber/transporte", "Uber, transporte e gasolina."],
+    ["IFood/restaurante", "Restaurantes e comidas de delivery."],
+    ["Lazer", "Festas, cinema, teatro, aniversários e apresentações."],
+    ["Aluguel", "Custos com moradia."],
+    ["Contas", "Internet, água, luz, condomínio, IPTU e outras contas."],
+  ];
 
   function seedState() {
     const now = new Date().toISOString();
-    const M = monthKeyOf(todayISO());
-    const seedDate = (offset, day) => {
-      const key = addMonthsKey(M, offset);
-      const [y, m] = key.split("-").map(Number);
-      const last = new Date(y, m, 0).getDate();
-      return `${key}-${pad(Math.min(day, last))}`;
-    };
-
-    const accounts = [
-      { id: "ACC-001", name: "Banco principal", institution: "Banco Exemplo", type: "Conta corrente", openingBalance: 10000, active: true },
-      { id: "ACC-002", name: "Caixa físico", institution: "Caixa interno", type: "Caixa", openingBalance: 1500, active: true },
-      { id: "ACC-003", name: "Reserva", institution: "Banco Exemplo", type: "Poupança", openingBalance: 5000, active: true },
-    ];
     const categories = [
-      ["Receitas", "Vendas", "Receita", "Vendas e serviços"],
-      ["Receitas", "Doações", "Receita", "Contribuições e ofertas"],
-      ["Operacional", "Materiais", "Despesa", "Materiais de consumo"],
-      ["Operacional", "Serviços", "Despesa", "Serviços contratados"],
-      ["Administrativo", "Aluguel", "Despesa", "Ocupação"],
-      ["Administrativo", "Internet e telefone", "Despesa", "Comunicação"],
-      ["Pessoal", "Salários", "Despesa", "Remuneração da equipe"],
-      ["Financeiro", "Tarifas e juros", "Despesa", "Custos financeiros"],
-      ["Investimentos", "Equipamentos", "Despesa", "Aquisição de ativos"],
-    ].map((c, i) => ({ id: `CAT-${pad(i + 1)}`, name: c[0], subcategory: c[1], type: c[2], description: c[3] }));
-
+      { id: "CAT-01", name: "Receitas", subcategory: "Entradas", type: "Receita", description: "Rendas e entradas mensais." },
+      ...CATEGORY_DEFS.map((c, i) => ({ id: `CAT-${pad(i + 2)}`, name: c[0], subcategory: "Geral", type: "Despesa", description: c[1] })),
+      { id: "CAT-17", name: "Não classificado", subcategory: "Revisar", type: "Despesa", description: "Categoria não informada na planilha; revise quando souber o destino do valor." },
+    ];
+    const accounts = [
+      { id: "ACC-001", name: "Conta principal", institution: "Banco", type: "Conta corrente", openingBalance: 0, active: true },
+      { id: "ACC-002", name: "Crédito 1", institution: "Cartão", type: "Cartão de crédito", openingBalance: 0, active: true },
+      { id: "ACC-003", name: "Crédito 2", institution: "Cartão", type: "Cartão de crédito", openingBalance: 0, active: true },
+      { id: "ACC-004", name: "Crédito 3", institution: "Cartão", type: "Cartão de crédito", openingBalance: 0, active: true },
+      { id: "ACC-005", name: "Crédito 4", institution: "Cartão", type: "Cartão de crédito", openingBalance: 0, active: true },
+      { id: "ACC-006", name: "Reserva", institution: "Investimento", type: "Investimento", openingBalance: 0, active: true },
+      { id: "ACC-007", name: "Renda fixa", institution: "Investimento", type: "Investimento", openingBalance: 0, active: true },
+    ];
     const costCenters = [
-      { id: "CC-001", name: "Administrativo", owner: "Coordenação", monthlyBudget: 5000, note: "Exemplo" },
-      { id: "CC-002", name: "Operacional", owner: "Operações", monthlyBudget: 8000, note: "Exemplo" },
-      { id: "CC-003", name: "Projetos", owner: "Gestor", monthlyBudget: 3000, note: "Exemplo" },
-      { id: "CC-004", name: "Comercial", owner: "Vendas", monthlyBudget: 4000, note: "Exemplo" },
+      { id: "CC-001", name: "Casa", owner: "Pessoal", monthlyBudget: 0, note: "Moradia e despesas do mês" },
+      { id: "CC-002", name: "Pessoal", owner: "Pessoal", monthlyBudget: 0, note: "Entradas e gastos pessoais" },
+      { id: "CC-003", name: "Cartões", owner: "Pessoal", monthlyBudget: 0, note: "Compras registradas nos cartões" },
+    ];
+
+    const sheets = [
+      {
+        label: "Outubro", month: "2026-10",
+        fixed: [
+          ["Luz", 355], ["Agua", 131], ["Tim", 200], ["Escola + Ballet", 60], ["DAS", 180], ["Regras", 270],
+        ],
+        variable: [
+          ["Combustivel 4", 450], ["Aluguel 1", 300], ["Aluguel 2", 300], ["Aluguel 3", 300],
+          ["Compras", 1000], ["Thayna", 300], ["Tamires Ultima", 300], ["Rematricula", 180],
+          ["Maristela", 200], ["Formatura", 150], ["IPTV", 30],
+        ],
+        cards: [],
+        income: [{ day: 28, description: "Entrada", amount: 2000 }],
+      },
+      {
+        label: "Novembro", month: "2026-11",
+        fixed: [
+          ["Aluguel", 2000, "Saúde"], ["Luz", 500], ["Agua", 150], ["Tim", 200], ["Internet", 120],
+          ["Escola + Ballet", 340], ["DAS", 180], ["10% dizimo", 1000],
+        ],
+        variable: [
+          ["Combustivel 1", 450], ["Combustivel 2", 450], ["Combustivel 3", 450], ["Combustivel 4", 450],
+          ["Aluguel 1", 300], ["Aluguel 2", 300], ["Aluguel 3", 300], ["Compras", 1000],
+          ["Ingressos + Apresentação", 195], ["Emprestimo 1/60", 318], ["Ipva atrasado 1/3", 650], ["Formatura 2/2", 300],
+        ],
+        cards: [
+          ["Atacadão", 400, "Crédito 1", "Cartão de Assinaturas"],
+          ["Carrefour", 800, "Crédito 2", "Compras Grandes"],
+          ["Nubank", 250, "Débito", ""],
+        ],
+        income: [
+          { day: 4, description: "Entrada", amount: 2000 }, { day: 11, description: "Entrada", amount: 2000 },
+          { day: 18, description: "Entrada", amount: 2000 }, { day: 25, description: "Entrada", amount: 2000 },
+          { day: 2, description: "Entrada", amount: 2000 }, { day: null, description: "Vô", amount: 800 },
+        ],
+      },
+      {
+        label: "Dezembro", month: "2026-12",
+        fixed: [
+          ["Aluguel", 2000, "Saúde"], ["Luz", 500], ["Agua", 150], ["Tim", 200], ["Internet", 120],
+          ["Escola + Ballet", 340], ["IPTV", 30], ["DAS", 180], ["10% dizimo", 760],
+        ],
+        variable: [
+          ["Combustivel 1", 450], ["Combustivel 2", 450], ["Combustivel 3", 450], ["Combustivel 4", 450],
+          ["Aluguel 1", 300], ["Aluguel 2", 300], ["Aluguel 3", 300], ["Compras", 1000],
+          ["Ipva 3/3", 650], ["Empréstimo 2/60", 318],
+        ],
+        cards: [
+          ["Atacadão", 400, "Crédito 1", "Cartão de Assinaturas"],
+          ["Carrefour", 800, "Crédito 2", "Compras Grandes"],
+          ["Nu", 250, "Crédito 1", ""],
+        ],
+        income: [
+          { day: 9, description: "Entrada", amount: 2000 }, { day: 16, description: "Entrada", amount: 2000 },
+          { day: 23, description: "Entrada", amount: 2000 }, { day: 30, description: "Entrada", amount: 1600 },
+          { day: null, description: "Vô", amount: 800 }, { day: null, description: "Entrada sem descrição", amount: 900 },
+        ],
+      },
     ];
 
     const transactions = [];
     let seq = 0;
+    const accountFor = (method) => {
+      const match = String(method || "").match(/^Crédito ([1-4])$/);
+      return match ? `ACC-00${Number(match[1]) + 1}` : "ACC-001";
+    };
+    const categoryFor = (description, explicit) => {
+      if (explicit) return { name: explicit, inferred: false };
+      const d = String(description || "").toLowerCase();
+      if (/combustivel/.test(d)) return { name: "Uber/transporte", inferred: true };
+      if (/aluguel/.test(d)) return { name: "Aluguel", inferred: true };
+      if (/luz|agua|tim|internet|iptv|das/.test(d)) return { name: "Contas", inferred: true };
+      if (/escola|ballet|rematricula/.test(d)) return { name: "Desenvolvimento", inferred: true };
+      if (/formatura|ingressos|apresenta/.test(d)) return { name: "Lazer", inferred: true };
+      if (/ipva/.test(d)) return { name: "Despesas eventuais", inferred: true };
+      if (/atacad|carrefour/.test(d)) return { name: "Mercado", inferred: true };
+      return { name: "Não classificado", inferred: false };
+    };
+    const groupFor = (description) => {
+      if (/emprestimo|empréstimo/i.test(description)) return "PRC-0001";
+      if (/ipva/i.test(description)) return "PRC-0002";
+      return null;
+    };
+    const joinNotes = (parts) => parts.filter(Boolean).join(" · ");
+
     function addTx(o) {
       seq += 1;
       const id = `LAN-${String(seq).padStart(4, "0")}`;
       const settle = o.settle || null;
-      const t = {
+      const createdAt = new Date(Date.now() + seq).toISOString();
+      const tx = {
         id,
         date: o.date,
         type: o.type,
         description: o.description,
         category: o.category,
         subcategory: o.subcategory,
+        section: o.section,
         account: o.account,
         costCenter: o.costCenter || "",
         amount: round2(o.amount),
-        dueDate: o.dueDate || o.date,
-        paidDate: settle || null,
+        dueDate: o.dueDate,
+        paidDate: settle,
         status: settle ? (o.type === "receita" ? "Recebido" : "Pago") : "Previsto",
-        method: o.method || "PIX",
+        method: o.method,
         note: o.note || "",
-        document: o.document || "",
+        document: o.sourceRef || "",
         payments: settle ? [{ id: `PG-${id}`, date: settle, amount: round2(o.amount), account: o.account, note: "" }] : [],
         groupId: o.groupId || null,
-        createdAt: now,
-        updatedAt: now,
+        sourceRef: o.sourceRef || "",
+        createdAt,
+        updatedAt: createdAt,
         cancelled: false,
       };
-      transactions.push(t);
-      return t;
+      transactions.push(tx);
+      return tx;
     }
 
-    // Histórico (5 meses anteriores ao atual)
-    for (let off = -5; off <= -1; off++) {
-      const label = monthLabel(addMonthsKey(M, off), "long");
-      addTx({ date: seedDate(off, 1), type: "receita", description: `Serviços de ${label}`, category: "Receitas", subcategory: "Vendas", account: "ACC-001", costCenter: "Comercial", amount: 5200, dueDate: seedDate(off, 1), settle: seedDate(off, 1) });
-      addTx({ date: seedDate(off, 5), type: "despesa", description: "Aluguel do espaço", category: "Administrativo", subcategory: "Aluguel", account: "ACC-001", costCenter: "Administrativo", amount: 1800, dueDate: seedDate(off, 5), settle: seedDate(off, 5), method: "Transferência" });
-      addTx({ date: seedDate(off, 10), type: "despesa", description: "Salários da equipe", category: "Pessoal", subcategory: "Salários", account: "ACC-001", costCenter: "Administrativo", amount: 4200, dueDate: seedDate(off, 10), settle: seedDate(off, 10), method: "Transferência" });
-      addTx({ date: seedDate(off, 12), type: "receita", description: "Doações do culto", category: "Receitas", subcategory: "Doações", account: "ACC-002", costCenter: "Projetos", amount: 900, dueDate: seedDate(off, 12), settle: seedDate(off, 12), method: "Dinheiro" });
-      addTx({ date: seedDate(off, 18), type: "despesa", description: "Materiais de consumo", category: "Operacional", subcategory: "Materiais", account: "ACC-001", costCenter: "Operacional", amount: 380, dueDate: seedDate(off, 18), settle: seedDate(off, 18) });
-      addTx({ date: seedDate(off, 20), type: "despesa", description: "Internet e telefone", category: "Administrativo", subcategory: "Internet e telefone", account: "ACC-001", costCenter: "Administrativo", amount: 220, dueDate: seedDate(off, 20), settle: seedDate(off, 20), method: "Boleto" });
-      addTx({ date: seedDate(off, 22), type: "receita", description: "Evento do mês", category: "Receitas", subcategory: "Vendas", account: "ACC-001", costCenter: "Projetos", amount: 800, dueDate: seedDate(off, 22), settle: seedDate(off, 22) });
-      addTx({ date: seedDate(off, 25), type: "despesa", description: "Manutenção", category: "Operacional", subcategory: "Serviços", account: "ACC-001", costCenter: "Operacional", amount: 250, dueDate: seedDate(off, 25), settle: seedDate(off, 25) });
-    }
-
-    // Mês atual — dados de referência da planilha
-    addTx({ date: seedDate(0, 3), type: "receita", description: "Serviço prestado", category: "Receitas", subcategory: "Vendas", account: "ACC-001", costCenter: "Comercial", amount: 4500, dueDate: seedDate(0, 3), settle: seedDate(0, 3), note: "Exemplo da planilha" });
-    addTx({ date: seedDate(0, 5), type: "despesa", description: "Aluguel do espaço", category: "Administrativo", subcategory: "Aluguel", account: "ACC-001", costCenter: "Administrativo", amount: 1800, dueDate: seedDate(0, 5), settle: seedDate(0, 5), method: "Transferência" });
-    addTx({ date: seedDate(0, 5), type: "despesa", description: "Compra de materiais", category: "Operacional", subcategory: "Materiais", account: "ACC-001", costCenter: "Operacional", amount: 850, dueDate: seedDate(0, 10), settle: seedDate(0, 10), note: "Fornecedor Alfa" });
-    addTx({ date: seedDate(0, 8), type: "despesa", description: "Internet e telefone", category: "Administrativo", subcategory: "Internet e telefone", account: "ACC-001", costCenter: "Administrativo", amount: 220, dueDate: seedDate(0, 20), method: "Boleto", note: "A vencer" });
-    addTx({ date: seedDate(0, 10), type: "despesa", description: "Salários de " + monthLabel(M, "long"), category: "Pessoal", subcategory: "Salários", account: "ACC-001", costCenter: "Administrativo", amount: 4500, dueDate: seedDate(0, 10), settle: seedDate(0, 10), method: "Transferência" });
-    addTx({ date: seedDate(0, 10), type: "receita", description: "Projeto recebido", category: "Receitas", subcategory: "Doações", account: "ACC-002", costCenter: "Projetos", amount: 1200, dueDate: seedDate(0, 10), settle: seedDate(0, 10), method: "Dinheiro", note: "Exemplo da planilha" });
-    addTx({ date: seedDate(0, 12), type: "despesa", description: "Manutenção", category: "Operacional", subcategory: "Serviços", account: "ACC-001", costCenter: "Operacional", amount: 600, dueDate: seedDate(0, 18), method: "Transferência", note: "Oficina Beta" });
-    addTx({ date: seedDate(0, 14), type: "despesa", description: "Tarifa bancária", category: "Financeiro", subcategory: "Tarifas e juros", account: "ACC-001", costCenter: "Administrativo", amount: 45, dueDate: seedDate(0, 14), settle: seedDate(0, 14), note: "Exemplo da planilha" });
-    addTx({ date: seedDate(0, 16), type: "receita", description: "Evento beneficente", category: "Receitas", subcategory: "Doações", account: "ACC-001", costCenter: "Projetos", amount: 3200, dueDate: seedDate(0, 16), settle: seedDate(0, 16) });
-    addTx({ date: seedDate(0, 18), type: "receita", description: "Mensalidade cliente", category: "Receitas", subcategory: "Vendas", account: "ACC-001", costCenter: "Comercial", amount: 950, dueDate: seedDate(0, 25), note: "Cliente Beta" });
-
-    // Parcelamento demonstrativo
-    const groupId = "PRC-0001";
-    const firstDue = seedDate(0, 28);
-    const totalParcel = 3600;
-    for (let i = 1; i <= 6; i++) {
-      const amount = i < 6 ? 600 : 600;
-      addTx({
-        date: seedDate(0, 20), type: "despesa",
-        description: `Notebook da secretaria (${i}/6)`,
-        category: "Investimentos", subcategory: "Equipamentos",
-        account: "ACC-001", costCenter: "Administrativo",
-        amount, dueDate: addMonthsISO(firstDue, i - 1), method: "Boleto",
-        note: "Parcelamento demonstrativo", groupId,
+    sheets.forEach((sheet) => {
+      const refDate = `${sheet.month}-01`;
+      sheet.fixed.forEach(([description, amount, explicitCategory]) => {
+        if (!(amount > 0)) return;
+        const cat = categoryFor(description, explicitCategory);
+        const notes = [
+          cat.inferred ? "Categoria sugerida pelo sistema; não informada na planilha." : "",
+          explicitCategory ? "Categoria mantida como Saúde, conforme a planilha." : "",
+          "Vencimento não informado na planilha.",
+        ];
+        addTx({
+          date: refDate, dueDate: null, type: "despesa", section: "Contas fixas", description,
+          category: cat.name, subcategory: cat.name === "Receitas" ? "Entradas" : cat.name === "Não classificado" ? "Revisar" : "Geral",
+          account: "ACC-001", costCenter: "Casa", amount, method: "Débito", settle: null,
+          note: joinNotes(notes), sourceRef: `${sheet.label} · Contas fixas`,
+        });
       });
-    }
-    const installmentGroups = [{
-      id: groupId, description: "Notebook da secretaria", type: "despesa",
-      totalAmount: totalParcel, count: 6, category: "Investimentos", subcategory: "Equipamentos",
-      account: "ACC-001", costCenter: "Administrativo", method: "Boleto",
-      firstDue, createdAt: now, cancelled: false,
-    }];
 
-    // Próximo mês — previsões
-    addTx({ date: seedDate(1, 5), type: "despesa", description: "Salários de " + monthLabel(addMonthsKey(M, 1), "long"), category: "Pessoal", subcategory: "Salários", account: "ACC-001", costCenter: "Administrativo", amount: 4500, dueDate: seedDate(1, 5), method: "Transferência" });
-    addTx({ date: seedDate(1, 5), type: "despesa", description: "Aluguel do espaço", category: "Administrativo", subcategory: "Aluguel", account: "ACC-001", costCenter: "Administrativo", amount: 1800, dueDate: seedDate(1, 5), method: "Transferência" });
-    addTx({ date: seedDate(1, 10), type: "receita", description: "Projeto de fim de ano", category: "Receitas", subcategory: "Doações", account: "ACC-001", costCenter: "Projetos", amount: 2400, dueDate: seedDate(1, 10) });
-    addTx({ date: seedDate(1, 15), type: "despesa", description: "Compra de equipamentos", category: "Investimentos", subcategory: "Equipamentos", account: "ACC-001", costCenter: "Operacional", amount: 1200, dueDate: seedDate(1, 15), method: "Boleto" });
+      sheet.variable.forEach(([description, amount]) => {
+        const cat = categoryFor(description);
+        const notes = [
+          cat.inferred ? "Categoria sugerida pelo sistema; não informada na planilha." : "",
+          "Data de referência: primeiro dia do mês; o dia não foi informado.",
+        ];
+        addTx({
+          date: refDate, dueDate: refDate, type: "despesa", section: "Gastos do mês", description,
+          category: cat.name, subcategory: cat.name === "Não classificado" ? "Revisar" : "Geral",
+          account: "ACC-001", costCenter: "Casa", amount, method: "Débito", settle: refDate,
+          note: joinNotes(notes), sourceRef: `${sheet.label} · Gastos do mês`, groupId: groupFor(description),
+        });
+      });
 
-    const transfers = [{
-      id: "TR-001", date: seedDate(0, 15), fromAccount: "ACC-001", toAccount: "ACC-002",
-      amount: 300, fee: 0, note: "Reforço de caixa para despesas miúdas",
-    }];
+      sheet.cards.forEach(([description, amount, method, detail]) => {
+        const cat = categoryFor(description);
+        const notes = [
+          detail,
+          cat.inferred ? "Categoria sugerida pelo sistema; não informada na planilha." : "",
+          "Data de referência: primeiro dia do mês; o dia não foi informado.",
+        ];
+        addTx({
+          date: refDate, dueDate: refDate, type: "despesa", section: "Cartão de crédito", description,
+          category: cat.name, subcategory: cat.name === "Não classificado" ? "Revisar" : "Geral",
+          account: accountFor(method), costCenter: "Cartões", amount, method, settle: refDate,
+          note: joinNotes(notes), sourceRef: `${sheet.label} · Cartão`,
+        });
+      });
 
-    const budgets = [];
-    let bseq = 0;
-    function addBudget(off, category, costCenter, planned) {
-      bseq += 1;
-      budgets.push({ id: `BGT-${pad(bseq, 3)}`, month: addMonthsKey(M, off), category, costCenter, planned });
-    }
-    [-1, 0, 1].forEach((off) => {
-      addBudget(off, "Operacional", "Operacional", off === 1 ? 3000 : 2500);
-      addBudget(off, "Administrativo", "Administrativo", 2200);
-      addBudget(off, "Pessoal", "Administrativo", off === 1 ? 5500 : 5000);
-      addBudget(off, "Financeiro", "Administrativo", 300);
-      addBudget(off, "Investimentos", "Administrativo", off === 1 ? 3000 : 1500);
+      sheet.income.forEach(({ day, description, amount }) => {
+        const date = day ? `${sheet.month}-${pad(day)}` : refDate;
+        const notes = [
+          day ? "" : "Dia da entrada não informado na planilha; usado o primeiro dia como referência.",
+          description === "Entrada sem descrição" ? "Descrição ausente na planilha." : "",
+        ];
+        addTx({
+          date, dueDate: date, type: "receita", section: "Entradas", description,
+          category: "Receitas", subcategory: "Entradas", account: "ACC-001", costCenter: "Pessoal",
+          amount, method: "Débito", settle: date, note: joinNotes(notes), sourceRef: `${sheet.label} · Entradas`,
+        });
+      });
     });
 
-    const reconciliations = [
-      { id: "REC-001", date: seedDate(0, 3), account: "ACC-001", description: "Crédito serviço", statementAmount: 4500, systemAmount: 4500, reconciled: true, note: "Exemplo" },
-      { id: "REC-002", date: seedDate(0, 5), account: "ACC-001", description: "Compra materiais", statementAmount: -850, systemAmount: -850, reconciled: true, note: "Exemplo" },
-      { id: "REC-003", date: seedDate(0, 20), account: "ACC-001", description: "Boleto internet", statementAmount: -220, systemAmount: 0, reconciled: false, note: "Lançamento ainda não identificado no sistema" },
+    const totalFor = (groupId) => round2(transactions.filter((t) => t.groupId === groupId).reduce((sum, t) => sum + num(t.amount), 0));
+    const installmentGroups = [
+      {
+        id: "PRC-0001", description: "Empréstimo", type: "despesa", totalAmount: totalFor("PRC-0001"), count: 60,
+        recordedCount: 2, category: "Não classificado", subcategory: "Revisar", account: "ACC-001",
+        costCenter: "Casa", method: "Débito", firstDue: "2026-11-01", createdAt: now, cancelled: false,
+        note: "A planilha registra apenas as parcelas 1/60 e 2/60.",
+      },
+      {
+        id: "PRC-0002", description: "IPVA", type: "despesa", totalAmount: totalFor("PRC-0002"), count: 3,
+        recordedCount: 2, category: "Despesas eventuais", subcategory: "Geral", account: "ACC-001",
+        costCenter: "Casa", method: "Débito", firstDue: "2026-11-01", createdAt: now, cancelled: false,
+        note: "A planilha registra 1/3 e 3/3; a parcela 2/3 não aparece.",
+      },
     ];
 
     return {
       version: VERSION,
-      meta: { org: "Luvis Finance", createdAt: now, updatedAt: now },
-      accounts, categories, costCenters, transactions, transfers,
-      budgets, reconciliations, installmentGroups,
+      meta: { org: "Livis Finance", source: "Contas 2026 Envios Extra.xlsx", defaultMonth: "2026-11", createdAt: now, updatedAt: now },
+      accounts, categories, costCenters, transactions, transfers: [],
+      budgets: [], reconciliations: [], installmentGroups,
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
-      audit: [{ id: uid("AUD"), ts: now, action: "Sistema inicializado", entity: "Demonstração", ref: "—", detail: "Dados fictícios carregados a partir do modelo." }],
+      audit: [{ id: uid("AUD"), ts: now, action: "Planilha importada", entity: "Contas 2026", ref: "Outubro a dezembro", detail: "Valores válidos importados; categorias ausentes receberam sugestões e datas não informadas usaram referência mensal." }],
     };
   }
 
   function emptyState() {
     return {
       version: VERSION,
-      meta: { org: "Luvis Finance", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      meta: { org: "Livis Finance", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
       accounts: [], categories: [], costCenters: [], transactions: [], transfers: [],
       budgets: [], reconciliations: [], installmentGroups: [],
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
@@ -333,18 +425,24 @@
       if (!loaded || loaded.version !== VERSION || !Array.isArray(loaded.transactions)) {
         loaded = seedState();
       }
-      // normalização defensiva
       loaded.settings = Object.assign({}, DEFAULT_LISTS, loaded.settings || {});
-      loaded.meta = Object.assign({ org: "Luvis Finance" }, loaded.meta || {});
+      loaded.meta = Object.assign({ org: "Livis Finance" }, loaded.meta || {});
       delete loaded.meta.theme;
-      const legacyOrg = ["Ministério AMI", "Minha organização"];
-      if (!loaded.meta.org || legacyOrg.includes(loaded.meta.org)) loaded.meta.org = "Luvis Finance";
+      const legacyOrg = ["Luvis Finance", "Ministério AMI", "Minha organização"];
+      if (!loaded.meta.org || legacyOrg.includes(loaded.meta.org)) loaded.meta.org = "Livis Finance";
       loaded.audit = loaded.audit || [];
       loaded.installmentGroups = loaded.installmentGroups || [];
+      loaded.transactions.forEach((t) => {
+        if (!t.section) t.section = t.type === "receita" ? "Entradas" : t.groupId ? "Gastos do mês" : "Contas fixas";
+      });
+      loaded.installmentGroups.forEach((g) => {
+        if (!g.recordedCount) g.recordedCount = loaded.transactions.filter((t) => t.groupId === g.id).length;
+      });
       this.state = loaded;
       try {
         const ui = JSON.parse(localStorage.getItem(UI_KEY) || "null");
         if (ui && /^\d{4}-\d{2}$/.test(ui.month || "")) this.ui.month = ui.month;
+        else if (/^\d{4}-\d{2}$/.test(loaded.meta.defaultMonth || "")) this.ui.month = loaded.meta.defaultMonth;
       } catch (e) {}
       this.save({ silent: true });
     },
@@ -384,7 +482,7 @@
 
     exportJSON() {
       const blob = new Blob([JSON.stringify(this.state, null, 2)], { type: "application/json" });
-      const name = `luvis-finance-backup-${todayISO()}.json`;
+      const name = `livis-finance-backup-${todayISO()}.json`;
       downloadFile(blob, name);
     },
     importJSON(text) {
@@ -395,15 +493,23 @@
       }
       data.version = VERSION;
       data.settings = Object.assign({}, DEFAULT_LISTS, data.settings || {});
-      data.meta = Object.assign({ org: "Luvis Finance" }, data.meta || {});
+      data.meta = Object.assign({ org: "Livis Finance" }, data.meta || {});
       delete data.meta.theme;
+      const legacyOrg = ["Luvis Finance", "Ministério AMI", "Minha organização"];
+      if (!data.meta.org || legacyOrg.includes(data.meta.org)) data.meta.org = "Livis Finance";
       data.audit = data.audit || [];
       data.installmentGroups = data.installmentGroups || [];
+      data.transactions.forEach((t) => {
+        if (!t.section) t.section = t.type === "receita" ? "Entradas" : t.groupId ? "Gastos do mês" : "Contas fixas";
+      });
+      data.installmentGroups.forEach((g) => {
+        if (!g.recordedCount) g.recordedCount = data.transactions.filter((t) => t.groupId === g.id).length;
+      });
       this.state = data;
       this.addAudit("Backup restaurado", "Sistema", "—", "Dados importados de arquivo JSON.");
       this.save();
     },
-    restoreDemo() {
+    restoreSheet() {
       this.state = seedState();
       this.save();
     },
@@ -441,27 +547,38 @@
       }[status] || "muted";
     },
 
+    isCashAccount(acc) {
+      return !!acc && !["Cartão de crédito", "Cartão", "Investimento"].includes(acc.type);
+    },
+    investmentBalance(untilISO) {
+      return round2(store.state.accounts
+        .filter((a) => a.type === "Investimento")
+        .reduce((s, a) => s + this.accountBalance(a.id, untilISO), 0));
+    },
     accountBalance(accountId, untilISO) {
       const acc = this.accountById(accountId);
       if (!acc) return 0;
+      const cutoff = untilISO || todayISO();
       let bal = num(acc.openingBalance);
       store.state.transactions.forEach((t) => {
         if (this.isCancelled(t)) return;
         (t.payments || []).forEach((p) => {
           if ((p.account || t.account) !== accountId) return;
-          if (untilISO && p.date > untilISO) return;
+          if (p.date > cutoff) return;
           bal += t.type === "receita" ? num(p.amount) : -num(p.amount);
         });
       });
       store.state.transfers.forEach((tr) => {
-        if (untilISO && tr.date > untilISO) return;
+        if (tr.date > cutoff) return;
         if (tr.fromAccount === accountId) bal -= num(tr.amount);
         if (tr.toAccount === accountId) bal += num(tr.amount);
       });
       return round2(bal);
     },
     consolidatedBalance(untilISO) {
-      return round2(store.state.accounts.reduce((s, a) => s + this.accountBalance(a.id, untilISO), 0));
+      return round2(store.state.accounts
+        .filter((a) => this.isCashAccount(a))
+        .reduce((s, a) => s + this.accountBalance(a.id, untilISO), 0));
     },
 
     paymentsInMonth(filter) {
@@ -471,6 +588,7 @@
         if (filter && filter.type && t.type !== filter.type) return;
         (t.payments || []).forEach((p) => {
           if (filter && filter.month && monthKeyOf(p.date) !== filter.month) return;
+          if (filter && filter.cashOnly && !this.isCashAccount(this.accountById(p.account || t.account))) return;
           out.push({ tx: t, payment: p });
         });
       });
@@ -482,20 +600,16 @@
       const end = monthEnd(key);
       let receitasRecebidas = 0;
       let despesasPagas = 0;
-      store.state.transactions.forEach((t) => {
-        if (this.isCancelled(t)) return;
-        (t.payments || []).forEach((p) => {
-          if (!p.date || p.date < start || p.date > end) return;
-          if (t.type === "receita") receitasRecebidas += num(p.amount);
-          else despesasPagas += num(p.amount);
-        });
+      this.paymentsInMonth({ month: key, cashOnly: true }).forEach(({ tx, payment }) => {
+        if (tx.type === "receita") receitasRecebidas += num(payment.amount);
+        else despesasPagas += num(payment.amount);
       });
       let entradasPrevistas = 0;
       let saidasPrevistas = 0;
       let countReceber = 0;
       let countPagar = 0;
       store.state.transactions.forEach((t) => {
-        if (!this.isOpen(t)) return;
+        if (!this.isOpen(t) || !this.isCashAccount(this.accountById(t.account))) return;
         if (!t.dueDate || monthKeyOf(t.dueDate) !== key) return;
         const rem = this.remaining(t);
         if (t.type === "receita") { entradasPrevistas += rem; countReceber += 1; }
@@ -511,12 +625,63 @@
         countReceber, countPagar, saldoInicial, saldoFinal, saldoProjetado,
       };
     },
+    monthPlan(key) {
+      let receitas = 0, despesas = 0, fixas = 0, variaveis = 0, cartao = 0;
+      store.state.transactions.forEach((t) => {
+        if (this.isCancelled(t) || monthKeyOf(t.date) !== key) return;
+        const amount = num(t.amount);
+        if (t.type === "receita") {
+          receitas += amount;
+          return;
+        }
+        despesas += amount;
+        if (t.section === "Contas fixas") fixas += amount;
+        else if (t.section === "Cartão de crédito") cartao += amount;
+        else variaveis += amount;
+      });
+      const investimentos = store.state.transfers
+        .filter((tr) => monthKeyOf(tr.date) === key)
+        .filter((tr) => {
+          const acc = this.accountById(tr.toAccount);
+          return acc && acc.type === "Investimento";
+        })
+        .reduce((sum, tr) => sum + num(tr.amount), 0);
+      return {
+        receitas: round2(receitas), despesas: round2(despesas), saldo: round2(receitas - despesas),
+        fixas: round2(fixas), variaveis: round2(variaveis), cartao: round2(cartao), investimentos: round2(investimentos),
+      };
+    },
     monthlySeries(keys) {
       return (keys || []).map((k) => Object.assign(this.monthStats(k), { label: monthLabel(k, "short") }));
     },
+    categoryPlan(key, type) {
+      const map = new Map();
+      store.state.transactions.forEach((t) => {
+        if (this.isCancelled(t) || monthKeyOf(t.date) !== key) return;
+        if (type && t.type !== type) return;
+        const name = t.category || "Sem categoria";
+        const cur = map.get(name) || { name, total: 0, count: 0 };
+        cur.total += num(t.amount);
+        cur.count += 1;
+        map.set(name, cur);
+      });
+      return Array.from(map.values()).map((x) => Object.assign(x, { total: round2(x.total) })).sort((a, b) => b.total - a.total);
+    },
+    paymentMethodTotals(key) {
+      const map = new Map();
+      store.state.transactions.forEach((t) => {
+        if (this.isCancelled(t) || t.type !== "despesa" || monthKeyOf(t.date) !== key) return;
+        const name = t.method || "Não informado";
+        const cur = map.get(name) || { name, total: 0, count: 0 };
+        cur.total += num(t.amount);
+        cur.count += 1;
+        map.set(name, cur);
+      });
+      return Array.from(map.values()).map((x) => Object.assign(x, { total: round2(x.total) })).sort((a, b) => b.total - a.total);
+    },
     categorySpend(key, type) {
       const map = new Map();
-      this.paymentsInMonth({ month: key, type: type || "despesa" }).forEach(({ tx, payment }) => {
+      this.paymentsInMonth({ month: key, type: type || "despesa", cashOnly: true }).forEach(({ tx, payment }) => {
         const k = tx.category || "Sem categoria";
         const cur = map.get(k) || { name: k, total: 0, count: 0 };
         cur.total += num(payment.amount);
@@ -717,6 +882,7 @@
   const actions = {
     saveTransaction(data, id) {
       const type = data.type === "receita" ? "receita" : "despesa";
+      const section = DEFAULT_LISTS.sections.includes(data.section) ? data.section : type === "receita" ? "Entradas" : "Gastos do mês";
       if (!data.description || !String(data.description).trim()) throw new Error("Informe uma descrição.");
       const amount = round2(data.amount);
       if (!(amount > 0)) throw new Error("O valor deve ser maior que zero.");
@@ -737,6 +903,7 @@
           description: String(data.description).trim(),
           category: data.category,
           subcategory: data.subcategory,
+          section,
           account: data.account,
           costCenter: data.costCenter || "",
           amount,
@@ -749,7 +916,7 @@
         });
         if (existing.groupId) {
           const g = store.state.installmentGroups.find((x) => x.id === existing.groupId);
-          if (g) { g.category = data.category; g.subcategory = data.subcategory; g.account = data.account; g.costCenter = data.costCenter || ""; }
+          if (g) { g.category = data.category; g.subcategory = data.subcategory; g.section = section; g.account = data.account; g.costCenter = data.costCenter || ""; }
         }
         store.addAudit("Lançamento editado", "Lançamento", existing.id, `${existing.description} — ${money(existing.amount)}`);
         store.save();
@@ -762,6 +929,7 @@
         description: String(data.description).trim(),
         category: data.category,
         subcategory: data.subcategory,
+        section,
         account: data.account,
         costCenter: data.costCenter || "",
         amount,
@@ -865,16 +1033,17 @@
       store.state.transfers.unshift(tr);
 
       if (fee > 0) {
-        const finCat = store.state.categories.find((c) => c.name === "Financeiro" && c.type === "Despesa")
+        const finCat = store.state.categories.find((c) => c.name === "Contas" && c.type === "Despesa")
           || store.state.categories.find((c) => c.type === "Despesa");
         const feeTx = {
           id: store.nextId(store.state.transactions, "LAN", 4),
           type: "despesa",
           description: `Taxa de transferência ${tr.id}`,
-          category: finCat ? finCat.name : "Financeiro",
-          subcategory: finCat ? finCat.subcategory : "Tarifas e juros",
+          category: finCat ? finCat.name : "Não classificado",
+          subcategory: finCat ? finCat.subcategory : "Revisar",
+          section: "Gastos do mês",
           account: tr.fromAccount,
-          costCenter: "Administrativo",
+          costCenter: "Casa",
           amount: fee,
           date: data.date,
           dueDate: data.date,
@@ -1098,6 +1267,7 @@
       if (!(count >= 2 && count <= 60)) throw new Error("A quantidade de parcelas deve estar entre 2 e 60.");
       if (!data.firstDue) throw new Error("Informe o primeiro vencimento.");
       const type = data.type === "receita" ? "receita" : "despesa";
+      const section = DEFAULT_LISTS.sections.includes(data.section) ? data.section : type === "receita" ? "Entradas" : "Gastos do mês";
       requireCategory(data.category, data.subcategory, type);
       if (!data.account || !calc.accountById(data.account)) throw new Error("Selecione a conta.");
       const groupId = store.nextId(store.state.installmentGroups, "PRC", 4);
@@ -1110,7 +1280,7 @@
           id: store.nextId(store.state.transactions, "LAN", 4),
           type,
           description: `${String(data.description || "Parcelamento").trim()} (${i}/${count})`,
-          category: data.category, subcategory: data.subcategory,
+          category: data.category, subcategory: data.subcategory, section,
           account: data.account, costCenter: data.costCenter || "",
           amount, date: data.date || todayISO(), dueDate: addMonthsISO(data.firstDue, i - 1),
           paidDate: null, status: "Previsto", method: data.method || "Boleto",
@@ -1121,7 +1291,7 @@
       }
       store.state.installmentGroups.unshift({
         id: groupId, description: String(data.description || "Parcelamento").trim(), type,
-        totalAmount: total, count, category: data.category, subcategory: data.subcategory,
+        totalAmount: total, count, recordedCount: count, category: data.category, subcategory: data.subcategory, section,
         account: data.account, costCenter: data.costCenter || "", method: data.method || "Boleto",
         firstDue: data.firstDue, createdAt: new Date().toISOString(), cancelled: false,
       });
@@ -1147,8 +1317,8 @@
     },
 
     updateOrg(name) {
-      store.state.meta.org = String(name || "").trim() || "Luvis Finance";
-      store.addAudit("Organização atualizada", "Sistema", "—", store.state.meta.org);
+      store.state.meta.org = String(name || "").trim() || "Livis Finance";
+      store.addAudit("Perfil atualizado", "Sistema", "—", store.state.meta.org);
       store.save();
     },
     updateLists(kind, list) {

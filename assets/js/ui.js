@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — componentes de interface
+   LIVIS FINANCE — componentes de interface
    ========================================================= */
 (function () {
   "use strict";
@@ -248,6 +248,7 @@
     opts = opts || {};
     const isEdit = !!tx;
     const type = tx ? tx.type : opts.type || "despesa";
+    const section = tx ? tx.section : opts.section || (type === "receita" ? "Entradas" : "Gastos do mês");
     const hasPayments = tx && (tx.payments || []).length > 0;
     const status = tx ? FM.calc.effectiveStatus(tx) : "";
     const body = `
@@ -286,6 +287,12 @@
           <select class="select" name="account">${accountOptions(tx ? tx.account : (opts.account || ""))}</select>
         </div>
         <div class="field">
+          <label>Origem</label>
+          <select class="select" name="section" data-section-select>
+            ${(state().settings.sections || []).map((s) => `<option ${s === section ? "selected" : ""}>${esc(s)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
           <label>Centro de custo</label>
           <select class="select" name="costCenter">${costCenterOptions(tx ? tx.costCenter : opts.costCenter || "")}</select>
         </div>
@@ -319,6 +326,7 @@
       onMount(ov, close, form) {
         const seg = ov.querySelector("[data-type-seg]");
         const catSel = ov.querySelector("[data-cat-select]");
+        const sectionSel = form.querySelector("[data-section-select]");
         const hidden = form.querySelector('input[name="type"]');
         const settleCheck = form.querySelector('input[name="settleNow"]');
         const settleFields = form.querySelector("[data-settle-fields]");
@@ -333,6 +341,7 @@
             seg.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
             const prev = catSel.value.split("||");
             catSel.innerHTML = categoryOptions(t, prev[0], prev[1]);
+            if (sectionSel) sectionSel.value = t === "receita" ? "Entradas" : sectionSel.value === "Entradas" ? "Gastos do mês" : sectionSel.value;
           });
         });
         if (dateInput && dueInput) {
@@ -364,6 +373,7 @@
           dueDate: fd.get("dueDate") || fd.get("date"),
           category: parts[0],
           subcategory: parts[1],
+          section: fd.get("section"),
           account: fd.get("account"),
           costCenter: fd.get("costCenter"),
           method: fd.get("method"),

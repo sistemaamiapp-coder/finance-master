@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — gráficos SVG (offline, sem dependências)
+   LIVIS FINANCE — gráficos SVG (offline, sem dependências)
    ========================================================= */
 (function () {
   "use strict";

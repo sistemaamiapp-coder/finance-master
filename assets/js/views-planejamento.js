@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — Orçamento, cadastros, DRE, relatórios, guia e configurações
+   LIVIS FINANCE — Orçamento, cadastros, DRE, relatórios, guia e configurações
    ========================================================= */
 (function () {
   "use strict";
@@ -193,7 +193,7 @@
     const used = cat ? categoryUsed(cat.name, cat.subcategory) : false;
     const body = `
       <div class="form-grid">
-        <div class="field"><label>Categoria</label><input class="input" name="name" list="cat-names" value="${cat ? esc(cat.name) : ""}" placeholder="Ex.: Administrativo"><datalist id="cat-names">${names.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist></div>
+        <div class="field"><label>Categoria</label><input class="input" name="name" list="cat-names" value="${cat ? esc(cat.name) : ""}" placeholder="Ex.: Mercado"><datalist id="cat-names">${names.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist></div>
         <div class="field"><label>Subcategoria</label><input class="input" name="subcategory" value="${cat ? esc(cat.subcategory) : ""}" placeholder="Ex.: Aluguel"></div>
         <div class="field"><label>Tipo</label><select class="select" name="type">
           <option value="Despesa" ${cat && cat.type === "Despesa" ? "selected" : ""}>Despesa</option>
@@ -485,7 +485,7 @@
     const margin = totalIncome > 0 ? s.resultado / totalIncome : 0;
 
     const ccMap = new Map();
-    calc.paymentsInMonth({ month }).forEach(({ tx, payment }) => {
+    calc.paymentsInMonth({ month, cashOnly: true }).forEach(({ tx, payment }) => {
       const key = tx.costCenter || "Sem centro";
       const cur = ccMap.get(key) || { name: key, rec: 0, desp: 0 };
       if (tx.type === "receita") cur.rec += U.num(payment.amount);
@@ -523,7 +523,7 @@
             <button class="btn ghost sm" id="dre-export">${icon("download")}Exportar</button>
           </div>
         </div>
-        <div class="print-head"><strong>DRE gerencial — ${esc(monthLabel(month, "long"))}</strong><span>Luvis Finance · regime de caixa · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>DRE gerencial — ${esc(monthLabel(month, "long"))}</strong><span>Livis Finance · regime de caixa · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="grid grid-3">
           <article class="kpi">
@@ -631,7 +631,7 @@
         ["Centro de custo", "Receitas", "Despesas", "Resultado"],
         ...ccRows.map((c) => [c.name, money(c.rec), money(c.desp), money(c.rec - c.desp)]),
       ];
-      U.downloadCSV(`luvis-finance-dre-${month}.csv`, ["Indicador", "Valor"], rows);
+      U.downloadCSV(`livis-finance-dre-${month}.csv`, ["Indicador", "Valor"], rows);
       FM.ui.toast("DRE exportado em CSV.");
     });
   };
@@ -675,7 +675,7 @@
           <article class="kpi"><div class="kpi-head"><span class="kpi-label">Receitas recebidas</span><span class="kpi-icon green">${icon("arrow-up")}</span></div><div class="kpi-value">${money(s.receitasRecebidas)}</div><div class="kpi-foot"><span>${income.length} categorias</span></div></article>
           <article class="kpi"><div class="kpi-head"><span class="kpi-label">Despesas pagas</span><span class="kpi-icon red">${icon("arrow-down")}</span></div><div class="kpi-value">${money(s.despesasPagas)}</div><div class="kpi-foot"><span>${spend.length} categorias</span></div></article>
           <article class="kpi"><div class="kpi-head"><span class="kpi-label">Resultado</span><span class="kpi-icon ${s.resultado >= 0 ? "green" : "red"}">${icon(s.resultado >= 0 ? "trending-up" : "trending-down")}</span></div><div class="kpi-value ${s.resultado >= 0 ? "pos" : "neg"}">${money(s.resultado)}</div><div class="kpi-foot"><span>Margem ${pct(s.receitasRecebidas ? s.resultado / s.receitasRecebidas : 0)}</span></div></article>
-          <article class="kpi"><div class="kpi-head"><span class="kpi-label">Saldo consolidado</span><span class="kpi-icon cyan">${icon("wallet")}</span></div><div class="kpi-value">${money(calc.consolidatedBalance())}</div><div class="kpi-foot"><span>${accounts.length} conta(s)</span></div></article>
+          <article class="kpi"><div class="kpi-head"><span class="kpi-label">Saldo disponível</span><span class="kpi-icon cyan">${icon("wallet")}</span></div><div class="kpi-value">${money(calc.consolidatedBalance())}</div><div class="kpi-foot"><span>${accounts.length} conta(s)</span></div></article>
         </div>
 
         <div class="grid grid-2 mt-16">
@@ -731,7 +731,7 @@
     mount.querySelectorAll("[data-report]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const kind = btn.dataset.report;
-        let filename = `luvis-finance-${kind}-${month}.csv`;
+        let filename = `livis-finance-${kind}-${month}.csv`;
         let headers = ["Indicador", "Valor"];
         let rows = [];
         if (kind === "resumo") {
@@ -741,7 +741,7 @@
             ["Receitas recebidas", money(s.receitasRecebidas)],
             ["Despesas pagas", money(s.despesasPagas)],
             ["Resultado", money(s.resultado)],
-            ["Saldo consolidado", money(calc.consolidatedBalance())],
+            ["Saldo disponível", money(calc.consolidatedBalance(U.monthEnd(month)))],
             ["A pagar em aberto", money(pay.total)],
             ["A receber em aberto", money(rec.total)],
             ["A pagar vencido", money(pay.overdue.total)],
@@ -750,15 +750,15 @@
             ["Orçamento realizado", money(budgets.actual)],
           ];
         } else if (kind === "lancamentos") {
-          headers = ["ID", "Data", "Tipo", "Descrição", "Categoria", "Conta", "Centro", "Vencimento", "Status", "Valor", "Em aberto"];
-          rows = st().transactions.filter((t) => monthKeyOf(t.date) === month).map((t) => [t.id, fmtDate(t.date), t.type === "receita" ? "Receita" : "Despesa", t.description, `${t.category} › ${t.subcategory}`, calc.accountName(t.account), t.costCenter, fmtDate(t.dueDate), calc.effectiveStatus(t), money(t.amount), money(calc.remaining(t))]);
+          headers = ["ID", "Data", "Tipo", "Descrição", "Origem", "Categoria", "Conta", "Centro", "Vencimento", "Status", "Valor", "Em aberto"];
+          rows = st().transactions.filter((t) => monthKeyOf(t.date) === month).map((t) => [t.id, fmtDate(t.date), t.type === "receita" ? "Receita" : "Despesa", t.description, t.section || "Sem origem", `${t.category} › ${t.subcategory}`, calc.accountName(t.account), t.costCenter, fmtDate(t.dueDate), calc.effectiveStatus(t), money(t.amount), money(calc.remaining(t))]);
         } else if (kind === "abertos") {
           headers = ["Tipo", "Vencimento", "Descrição", "Categoria", "Conta", "Valor", "Em aberto", "Status"];
           rows = st().transactions.filter((t) => calc.isOpen(t)).sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || "")).map((t) => [t.type === "receita" ? "A receber" : "A pagar", fmtDate(t.dueDate), t.description, `${t.category} › ${t.subcategory}`, calc.accountName(t.account), money(t.amount), money(calc.remaining(t)), calc.effectiveStatus(t)]);
         } else if (kind === "categorias") {
           headers = ["Tipo", "Categoria", "Valor realizado", "Lançamentos"];
           rows = income.map((c) => ["Receita", c.name, money(c.total), c.count]).concat(spend.map((c) => ["Despesa", c.name, money(c.total), c.count]));
-          filename = `luvis-finance-categorias-${month}.csv`;
+          filename = `livis-finance-categorias-${month}.csv`;
         } else if (kind === "orcamento") {
           headers = ["Categoria", "Centro de custo", "Planejado", "Realizado", "Disponível", "Uso %"];
           rows = budgets.rows.map((r) => [r.category, r.costCenter || "Todos", money(r.planned), money(r.actual), money(r.remaining), pct(r.usage)]);
@@ -789,12 +789,12 @@
           <div><h2>Guia de uso e dicas</h2><p>Regras do sistema, rotinas de controle e roteiro de evolução para ${esc(org)}.</p></div>
           <div class="content-actions"><button class="btn ghost sm" id="guide-print">${icon("printer")}Imprimir guia</button></div>
         </div>
-        <div class="print-head"><strong>Guia de uso — Luvis Finance</strong><span>${esc(org)} · ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Guia de uso — Livis Finance</strong><span>${esc(org)} · ${fmtDate(todayISO())}</span></div>
 
         <div class="guide-grid">
           <section class="card guide-card">
             <h3>${icon("sparkles")}Como o sistema pensa</h3>
-            <p>O Luvis Finance usa uma <b>base central de lançamentos</b>. Contas a pagar/receber, DRE, fluxo e relatórios são visões derivadas — nunca digite o mesmo fato em dois lugares.</p>
+            <p>O Livis Finance usa uma <b>base central de lançamentos</b>. Contas a pagar/receber, DRE, fluxo e relatórios são visões derivadas — nunca digite o mesmo fato em dois lugares.</p>
             <ul>
               <li><b>Status automático</b>: sem baixa e vencimento futuro = Previsto; sem baixa e vencido = Atrasado; com baixa parcial = Parcial; quitado = Pago/Recebido; cancelado preserva histórico.</li>
               <li><b>Baixa</b> é o momento em que o dinheiro se move. Só a baixa altera saldo e resultado realizado.</li>
@@ -805,9 +805,21 @@
           </section>
 
           <section class="card guide-card">
+            <h3>${icon("file")}Como a planilha foi importada</h3>
+            <p>Os dados válidos de <b>outubro, novembro e dezembro de 2026</b> vieram de “Contas 2026 Envios Extra.xlsx”.</p>
+            <ul>
+              <li><b>Contas fixas</b> ficaram em aberto porque a coluna “Pago?” estava desmarcada.</li>
+              <li><b>Gastos do mês e cartão</b> foram registrados como pagos; quando o dia não existia, o primeiro dia do mês foi usado como referência.</li>
+              <li>Categorias ausentes receberam <b>sugestões automáticas</b>. O aluguel continuou como Saúde porque era essa a classificação da planilha.</li>
+              <li>Valores sem descrição, vencimento ou categoria não foram inventados; use “Não classificado” para revisar.</li>
+              <li>Cartões e investimentos ficam separados do <b>saldo disponível</b>.</li>
+            </ul>
+          </section>
+
+          <section class="card guide-card">
             <h3>${icon("check-circle")}Primeiros passos</h3>
             <div class="steps">
-              <div class="step">Cadastre as contas em <b>Contas bancárias</b> com o saldo inicial de cada uma.</div>
+              <div class="step">Cadastre as contas em <b>Contas e investimentos</b> com o saldo inicial de cada uma.</div>
               <div class="step">Revise <b>Categorias</b> e <b>Centros de custo</b> para refletir sua realidade.</div>
               <div class="step">Defina o <b>orçamento</b> do mês por categoria e centro.</div>
               <div class="step">Registre receitas e despesas com data, vencimento e classificação.</div>
@@ -920,10 +932,10 @@
 
         <div class="grid grid-2">
           <section class="card">
-            <div class="card-head"><div><div class="card-title">${icon("user")}Organização</div><div class="card-sub">Nome exibido no sistema e nos relatórios impressos</div></div></div>
+            <div class="card-head"><div><div class="card-title">${icon("user")}Perfil financeiro</div><div class="card-sub">Nome exibido no sistema e nos relatórios impressos</div></div></div>
             <div class="card-body">
               <div class="form-grid">
-                <div class="field full"><label>Nome da organização</label><input class="input" id="org-input" value="${esc(meta.org)}" maxlength="60"></div>
+                <div class="field full"><label>Nome do perfil</label><input class="input" id="org-input" value="${esc(meta.org)}" maxlength="60"></div>
               </div>
               <div class="row mt-12" style="justify-content:flex-end"><button class="btn primary sm" id="save-org">${icon("save")}Salvar nome</button></div>
             </div>
@@ -981,9 +993,9 @@
                 <input type="file" id="import-file" accept=".json,application/json" hidden>
               </div>
               <div class="budget-card">
-                <div class="budget-card-head"><div><h4>Dados de demonstração</h4><span>Recomeçar com exemplo</span></div>${icon("refresh")}</div>
-                <p class="small muted">Substitui todo o conteúdo pelos dados fictícios do modelo.</p>
-                <button class="btn sm subtle" id="restore-demo">${icon("refresh")}Restaurar demonstração</button>
+                <div class="budget-card-head"><div><h4>Dados da planilha</h4><span>Restaurar outubro a dezembro de 2026</span></div>${icon("refresh")}</div>
+                <p class="small muted">Substitui todo o conteúdo pelos registros válidos de “Contas 2026 Envios Extra.xlsx”.</p>
+                <button class="btn sm subtle" id="restore-demo">${icon("refresh")}Restaurar dados da planilha</button>
               </div>
             </div>
             <div class="analytics-callout mt-12">${icon("info")}<span>Importar backup <b>substitui</b> todos os dados atuais. Exporte antes de restaurar ou importar outro arquivo.</span></div>
@@ -1019,7 +1031,7 @@
     mount.querySelector("#save-org").addEventListener("click", () => {
       const val = mount.querySelector("#org-input").value;
       FM.actions.updateOrg(val);
-      FM.ui.toast("Nome da organização atualizado.");
+      FM.ui.toast("Nome do perfil atualizado.");
     });
 
     ["methods", "periodicities"].forEach((kind) => {
@@ -1077,14 +1089,14 @@
 
     mount.querySelector("#restore-demo").addEventListener("click", async () => {
       const ok = await FM.ui.confirm({
-        title: "Restaurar demonstração",
-        message: "Todos os dados atuais serão substituídos pelos dados fictícios do modelo. Deseja continuar?",
+        title: "Restaurar dados da planilha",
+        message: "Todos os dados atuais serão substituídos pelos registros de outubro a dezembro de 2026. Deseja continuar?",
         confirmLabel: "Restaurar",
         danger: true,
       });
       if (!ok) return;
-      FM.store.restoreDemo();
-      FM.ui.toast("Dados de demonstração restaurados.", "info");
+      FM.store.restoreSheet();
+      FM.ui.toast("Dados da planilha restaurados.", "info");
     });
 
     mount.querySelector("#clear-all").addEventListener("click", async () => {

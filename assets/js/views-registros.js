@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — Lançamentos, contas a pagar/receber, parcelamentos
+   LIVIS FINANCE — Lançamentos, contas a pagar/receber, parcelamentos
    ========================================================= */
 (function () {
   "use strict";
@@ -34,7 +34,7 @@
       <td class="nowrap">${fmtDate(t.date, "short")}</td>
       <td>
         <div class="cell-main">${FM.ui.typeMark(t.type)}
-          <div class="cell-text"><div class="cell-title">${esc(t.description)}</div><div class="cell-sub">${esc(t.category)} › ${esc(t.subcategory)}</div></div>
+          <div class="cell-text"><div class="cell-title">${esc(t.description)}</div><div class="cell-sub">${esc(t.section || "Sem origem")} · ${esc(t.category)}</div></div>
         </div>
       </td>
       <td class="nowrap small">${esc(C.accountName(t.account))}</td>
@@ -58,6 +58,7 @@
     F.status = F.status || "all";
     F.account = F.account || "all";
     F.category = F.category || "all";
+    F.section = F.section || "all";
     F.period = F.period || "month";
     let visible = [];
 
@@ -71,10 +72,11 @@
           if (F.type !== "all" && t.type !== F.type) return false;
           if (F.account !== "all" && t.account !== F.account) return false;
           if (F.category !== "all" && t.category !== F.category) return false;
+          if (F.section !== "all" && t.section !== F.section) return false;
           if (F.period === "month" && U.monthKeyOf(t.date) !== ctx.month) return false;
           if (F.status !== "all" && C.effectiveStatus(t) !== F.status) return false;
           if (F.q) {
-            const hay = [t.id, t.description, t.category, t.subcategory, t.costCenter, C.accountName(t.account), t.note].join(" ").toLowerCase();
+            const hay = [t.id, t.description, t.section, t.category, t.subcategory, t.costCenter, C.accountName(t.account), t.note].join(" ").toLowerCase();
             if (!hay.includes(F.q.toLowerCase())) return false;
           }
           return true;
@@ -128,6 +130,10 @@
               <option value="all">Todas as categorias</option>
               ${categories.map((c) => `<option ${F.category === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
             </select>
+            <select class="select" id="flt-section">
+              <option value="all">Todas as origens</option>
+              ${(st.settings.sections || []).map((s) => `<option value="${esc(s)}" ${F.section === s ? "selected" : ""}>${esc(s)}</option>`).join("")}
+            </select>
             <select class="select" id="flt-period">
               <option value="month" ${F.period === "month" ? "selected" : ""}>${esc(monthLabel(ctx.month))}</option>
               <option value="all" ${F.period === "all" ? "selected" : ""}>Todo o período</option>
@@ -164,7 +170,7 @@
         : `<tr><td colspan="9">${FM.ui.emptyState("receipt", "Nenhum lançamento encontrado", "Ajuste os filtros ou registre uma nova operação.", `<button class="btn sm subtle" data-new-tx>${icon("plus")}Novo lançamento</button>`)}</td></tr>`;
     }
 
-    const ids = ["flt-q", "flt-type", "flt-status", "flt-account", "flt-cat", "flt-period"];
+    const ids = ["flt-q", "flt-type", "flt-status", "flt-account", "flt-cat", "flt-section", "flt-period"];
     ids.forEach((id) => {
       const el = mount.querySelector("#" + id);
       el.addEventListener(id === "flt-q" ? "input" : "change", () => {
@@ -173,23 +179,24 @@
         F.status = mount.querySelector("#flt-status").value;
         F.account = mount.querySelector("#flt-account").value;
         F.category = mount.querySelector("#flt-cat").value;
+        F.section = mount.querySelector("#flt-section").value;
         F.period = mount.querySelector("#flt-period").value;
         renderRows();
       });
     });
     mount.querySelector("#flt-clear").addEventListener("click", () => {
-      Object.assign(F, { q: "", type: "all", status: "all", account: "all", category: "all", period: "month" });
+      Object.assign(F, { q: "", type: "all", status: "all", account: "all", category: "all", section: "all", period: "month" });
       FM.app.renderCurrent();
     });
     mount.querySelector("#tx-export").addEventListener("click", () => {
       const rows = visible.map((t) => [
-        t.id, fmtDate(t.date), t.type === "receita" ? "Receita" : "Despesa", t.description,
+        t.id, fmtDate(t.date), t.type === "receita" ? "Receita" : "Despesa", t.description, t.section || "",
         `${t.category} › ${t.subcategory}`, FM.calc.accountName(t.account), t.costCenter,
         fmtDate(t.dueDate), fmtDate(t.paidDate), FM.calc.effectiveStatus(t),
         t.method, U.num(t.amount).toFixed(2).replace(".", ","), FM.calc.remaining(t).toFixed(2).replace(".", ","), t.note,
       ]);
-      U.downloadCSV(`luvis-finance-lancamentos-${ctx.month}.csv`,
-        ["ID", "Data", "Tipo", "Descrição", "Categoria", "Conta", "Centro de custo", "Vencimento", "Baixa", "Status", "Forma", "Valor", "Em aberto", "Observação"],
+      U.downloadCSV(`livis-finance-lancamentos-${ctx.month}.csv`,
+        ["ID", "Data", "Tipo", "Descrição", "Origem", "Categoria", "Conta", "Centro de custo", "Vencimento", "Baixa", "Status", "Forma", "Valor", "Em aberto", "Observação"],
         rows);
       FM.ui.toast("Lançamentos exportados em CSV.");
     });
@@ -320,7 +327,7 @@
         });
       });
       mount.querySelector("#pend-export").addEventListener("click", () => {
-        U.downloadCSV(`luvis-finance-${isRec ? "a-receber" : "a-pagar"}.csv`,
+        U.downloadCSV(`livis-finance-${isRec ? "a-receber" : "a-pagar"}.csv`,
           ["Vencimento", "Descrição", "Categoria", "Conta", "Valor", "Baixado", "Em aberto", "Status"],
           visible.map((t) => [fmtDate(t.dueDate), t.description, `${t.category} › ${t.subcategory}`, C.accountName(t.account), money(t.amount), money(C.paidTotal(t)), money(C.remaining(t)), C.effectiveStatus(t)]));
         FM.ui.toast("Arquivo CSV exportado.");
@@ -348,6 +355,7 @@
         <div class="field"><label>1º vencimento</label><input class="input" type="date" name="firstDue" value="${todayISO()}"></div>
         <div class="field"><label>Data de emissão</label><input class="input" type="date" name="date" value="${todayISO()}"></div>
         <div class="field"><label>Categoria</label><select class="select" name="category" id="inst-cat">${FM.ui.categoryOptions("despesa")}</select></div>
+        <div class="field"><label>Origem</label><select class="select" name="section">${(FM.store.state.settings.sections || []).map((s) => `<option ${s === "Gastos do mês" ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>
         <div class="field"><label>Conta</label><select class="select" name="account">${FM.ui.accountOptions("")}</select></div>
         <div class="field"><label>Centro de custo</label><select class="select" name="costCenter">${FM.ui.costCenterOptions("")}</select></div>
         <div class="field"><label>Forma</label><select class="select" name="method">${FM.ui.methodOptions("Boleto")}</select></div>
@@ -366,6 +374,8 @@
         const catSel = ov.querySelector("#inst-cat");
         typeSel.addEventListener("change", () => {
           catSel.innerHTML = FM.ui.categoryOptions(typeSel.value);
+          const sectionSel = ov.querySelector('select[name="section"]');
+          if (sectionSel) sectionSel.value = typeSel.value === "receita" ? "Entradas" : "Gastos do mês";
         });
       },
       onSubmit(fd) {
@@ -380,6 +390,7 @@
           date: fd.get("date"),
           category: parts[0],
           subcategory: parts[1],
+          section: fd.get("section"),
           account: fd.get("account"),
           costCenter: fd.get("costCenter"),
           method: fd.get("method"),
@@ -417,6 +428,7 @@
         if (C.remaining(t) <= 0.004 && !C.isCancelled(t)) paidCount += 1;
       });
       const total = g.totalAmount || txs.reduce((s, t) => s + U.num(t.amount), 0);
+      const partial = g.recordedCount != null && g.recordedCount < g.count;
       totalOpen += openSum; totalPaid += paidSum; totalValue += total;
       const pctVal = total ? Math.min(paidSum / total, 1) : 0;
       const next = txs.find((t) => C.isOpen(t));
@@ -435,15 +447,16 @@
         <div class="card-head">
           <div>
             <div class="card-title">${FM.ui.typeMark(g.type)}<span style="margin-left:2px">${esc(g.description)}</span></div>
-            <div class="card-sub">${esc(g.category)} › ${esc(g.subcategory)} · ${txs.length} parcelas · ${esc(C.accountName(g.account))}</div>
+            <div class="card-sub">${esc(g.category)} · ${partial ? `${txs.length} de ${g.count} parcelas registradas` : `${txs.length} parcelas`} · ${esc(C.accountName(g.account))}</div>
           </div>
-          <span class="badge ${g.cancelled ? "muted" : openSum > 0 ? "primary" : "ok"}">${g.cancelled ? "Cancelado" : openSum > 0 ? "Em andamento" : "Concluído"}</span>
+          <span class="badge ${g.cancelled ? "muted" : partial ? "warn" : openSum > 0 ? "primary" : "ok"}">${g.cancelled ? "Cancelado" : partial ? "Registro parcial" : openSum > 0 ? "Em andamento" : "Concluído"}</span>
         </div>
         <div class="card-body">
-          <div class="budget-nums mb-8"><span>Total <b>${money(total)}</b></span><span>Pago <b>${money(paidSum)}</b> · ${paidCount}/${txs.length}</span></div>
+          <div class="budget-nums mb-8"><span>${partial ? "Total registrado" : "Total"} <b>${money(total)}</b></span><span>Pago <b>${money(paidSum)}</b> · ${paidCount}/${txs.length}</span></div>
+          ${g.note ? `<p class="small muted mb-8">${esc(g.note)}</p>` : ""}
           <div class="progress ${openSum > 0 ? "purple" : "green"}"><span style="width:${(pctVal * 100).toFixed(1)}%"></span></div>
           <div class="row between mt-8 small muted">
-            <span>${next ? `Próxima: ${fmtDate(next.dueDate)}` : "Todas as parcelas quitadas"}</span>
+            <span>${next ? `Próxima: ${fmtDate(next.dueDate)}` : partial ? "Parcelas registradas quitadas" : "Todas as parcelas quitadas"}</span>
             <span>Em aberto: <b class="text-amber">${money(openSum)}</b></span>
           </div>
           <div class="table-wrap mt-12" style="border-top:1px solid var(--border)">

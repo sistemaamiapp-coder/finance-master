@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — Dashboard
+   LIVIS FINANCE — Dashboard
    ========================================================= */
 (function () {
   "use strict";
@@ -48,7 +48,11 @@
     const s = C.monthStats(month);
     const prev = C.monthStats(addMonthsKey(month, -1));
     const next = C.monthStats(addMonthsKey(month, 1));
-    const cash = C.consolidatedBalance();
+    const plan = C.monthPlan(month);
+    const prevPlan = C.monthPlan(addMonthsKey(month, -1));
+    const cash = C.consolidatedBalance(U.monthEnd(month));
+    const investments = C.investmentBalance(U.monthEnd(month));
+    const cashCount = st.accounts.filter((a) => C.isCashAccount(a)).length;
     const pay = C.openTotals("despesa");
     const rec = C.openTotals("receita");
     const keys = lastMonthKeys(6, month);
@@ -57,17 +61,18 @@
     const sparkRec = stats.map((x) => x.receitasRecebidas);
     const sparkDesp = stats.map((x) => x.despesasPagas);
 
-    const cats = groupCategories(C.categorySpend(month, "despesa"), 5);
+    const cats = groupCategories(C.categoryPlan(month, "despesa"), 5);
     const palette = FM.charts.palette;
     const donutItems = cats.map((c, i) => ({ label: c.name, value: c.total, color: palette[i % palette.length] }));
+    const methods = C.paymentMethodTotals(month);
+    const maxMethod = methods.reduce((max, m) => Math.max(max, m.total), 0);
 
     const budgets = C.budgetRows(month);
-    const budgetTotals = C.budgetTotals(month);
     const insights = C.insights(month);
 
     const openItems = st.transactions
-      .filter((t) => C.isOpen(t) && t.dueDate)
-      .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""))
+      .filter((t) => C.isOpen(t))
+      .sort((a, b) => (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31"))
       .slice(0, 6);
 
     const recent = st.transactions
@@ -87,28 +92,24 @@
         </div>`
       : "";
 
-    const budgetRowsHtml = budgets.length
-      ? budgets.slice(0, 4).map((r) => {
-          const cls = r.over ? "red" : r.usage >= 0.8 ? "amber" : "green";
-          return `<div class="budget-item">
-            <div class="budget-top">
-              <div class="budget-name"><strong>${esc(r.category)}</strong><span>${esc(r.costCenter || "Todos os centros")}</span></div>
-              <div class="budget-values"><strong class="${r.over ? "over" : ""}">${moneyShort(r.actual)}</strong> / ${moneyShort(r.planned)}</div>
-            </div>
-            <div class="progress ${cls}"><span style="width:${Math.min(r.usage * 100, 100).toFixed(1)}%"></span></div>
-            <div class="budget-values" style="text-align:left"><span>${pct(r.usage)} utilizado${r.over ? " · orçamento estourado" : ` · restam ${moneyShort(r.remaining)}`}</span></div>
-          </div>`;
-        }).join("")
-      : FM.ui.emptyState("target", "Nenhum orçamento neste mês", "Defina limites por categoria e centro de custo para comparar o planejado com o realizado.", `<a class="btn sm subtle" href="#/orcamento">Definir orçamento</a>`);
+    const methodRowsHtml = methods.length
+      ? methods.map((m) => `<div class="budget-item">
+          <div class="budget-top">
+            <div class="budget-name"><strong>${esc(m.name)}</strong><span>${m.count} lançamento(s)</span></div>
+            <div class="budget-values"><strong>${moneyShort(m.total)}</strong></div>
+          </div>
+          <div class="progress ${m.name.startsWith("Crédito") ? "purple" : "green"}"><span style="width:${maxMethod ? Math.min((m.total / maxMethod) * 100, 100).toFixed(1) : 0}%"></span></div>
+        </div>`).join("")
+      : FM.ui.emptyState("credit-card", "Nenhuma despesa neste mês", "As formas de pagamento aparecem quando há despesas registradas.");
 
     const dueHtml = openItems.length
       ? `<div class="due-list">${openItems.map((t) => {
-          const d = U.parseISO(t.dueDate);
-          const late = t.dueDate < todayISO();
+          const d = t.dueDate ? U.parseISO(t.dueDate) : null;
+          const late = !!t.dueDate && t.dueDate < todayISO();
           const isReceita = t.type === "receita";
           return `<a class="due-item" href="#/${isReceita ? "a-receber" : "a-pagar"}">
-            <div class="due-date ${late ? "late" : ""}"><b>${String(d.getDate()).padStart(2, "0")}</b><span>${U.MONTHS_SHORT[d.getMonth()]}</span></div>
-            <div class="due-main"><strong>${esc(t.description)}</strong><span>${isReceita ? "A receber" : "A pagar"} · ${esc(t.category)} · ${dueLabel(t.dueDate)}</span></div>
+            <div class="due-date ${late ? "late" : ""}"><b>${d ? String(d.getDate()).padStart(2, "0") : "—"}</b><span>${d ? U.MONTHS_SHORT[d.getMonth()] : "sem data"}</span></div>
+            <div class="due-main"><strong>${esc(t.description)}</strong><span>${isReceita ? "A receber" : "A pagar"} · ${esc(t.category)} · ${t.dueDate ? dueLabel(t.dueDate) : "vencimento não informado"}</span></div>
             <div class="due-meta"><div class="amount ${isReceita ? "pos" : "neg"}">${money(C.remaining(t))}</div><small>${esc(C.accountName(t.account))}</small></div>
           </a>`;
         }).join("")}</div>`
@@ -120,7 +121,7 @@
       ? recent.map((t) => {
           const status = C.effectiveStatus(t);
           return `<tr data-open-tx="${t.id}" class="clickable">
-            <td><div class="cell-main">${FM.ui.typeMark(t.type)}<div class="cell-text"><div class="cell-title">${esc(t.description)}</div><div class="cell-sub">${esc(t.category)} › ${esc(t.subcategory)}</div></div></div></td>
+            <td><div class="cell-main">${FM.ui.typeMark(t.type)}<div class="cell-text"><div class="cell-title">${esc(t.description)}</div><div class="cell-sub">${esc(t.section || "Sem origem")} · ${esc(t.category)}</div></div></div></td>
             <td class="nowrap muted">${fmtDate(t.date, "short")}</td>
             <td>${badge(status)}</td>
             <td class="num"><span class="amount ${t.type === "receita" ? "pos" : "neg"}">${t.type === "receita" ? "+" : "−"} ${money(t.amount)}</span></td>
@@ -133,7 +134,7 @@
         <div class="content-head">
           <div>
             <h2>Resumo financeiro</h2>
-            <p>Competência de <b>${esc(monthLabel(month, "long"))}</b> · dados de demonstração · atualizado em ${fmtDate(todayISO(), "short")}</p>
+            <p>Competência de <b>${esc(monthLabel(month, "long"))}</b> · controle pessoal · atualizado em ${fmtDate(todayISO(), "short")}</p>
           </div>
           <div class="content-actions">
             <button class="btn ghost sm" id="dash-export">${icon("download")}Exportar resumo</button>
@@ -143,36 +144,45 @@
 
         ${alertHtml}
 
-        <div class="kpi-grid">
+        <div class="card mt-16">
+          <div class="summary-row">
+            <div class="mini-stat"><span>Contas fixas</span><strong class="text-red">${money(plan.fixas)}</strong><small class="muted">compromissos recorrentes</small></div>
+            <div class="mini-stat"><span>Gastos do mês</span><strong class="text-red">${money(plan.variaveis)}</strong><small class="muted">compras e imprevistos</small></div>
+            <div class="mini-stat"><span>Cartão de crédito</span><strong class="text-red">${money(plan.cartao)}</strong><small class="muted">compras nos cartões</small></div>
+            <div class="mini-stat"><span>Investimentos</span><strong class="text-green">${money(investments)}</strong><small class="muted">saldo reservado e aplicado</small></div>
+          </div>
+        </div>
+
+        <div class="kpi-grid mt-16">
           <article class="kpi hero">
-            <div class="kpi-head"><span class="kpi-label">Saldo consolidado</span><span class="kpi-icon green">${icon("wallet")}</span></div>
+            <div class="kpi-head"><span class="kpi-label">Saldo disponível</span><span class="kpi-icon green">${icon("wallet")}</span></div>
             <div class="kpi-value ${cash < 0 ? "neg" : ""}">${money(cash)}</div>
-            <div class="kpi-foot"><span>${st.accounts.length} conta(s) · inclui transferências</span></div>
+            <div class="kpi-foot"><span>${cashCount} conta(s) · saldo em ${esc(monthLabel(month, "short"))} · cartões e investimentos à parte</span></div>
             ${FM.charts.spark(sparkSaldo, "#48ad8c")}
           </article>
           <article class="kpi">
-            <div class="kpi-head"><span class="kpi-label">Receitas recebidas</span><span class="kpi-icon green">${icon("arrow-up")}</span></div>
-            <div class="kpi-value">${money(s.receitasRecebidas)}</div>
-            <div class="kpi-foot">${delta(s.receitasRecebidas, prev.receitasRecebidas, true)}<span>vs. mês anterior</span></div>
+            <div class="kpi-head"><span class="kpi-label">Receitas do mês</span><span class="kpi-icon green">${icon("arrow-up")}</span></div>
+            <div class="kpi-value">${money(plan.receitas)}</div>
+            <div class="kpi-foot">${delta(plan.receitas, prevPlan.receitas, true)}<span>${money(s.receitasRecebidas)} recebidos</span></div>
             ${FM.charts.spark(sparkRec, "#48ad8c")}
           </article>
           <article class="kpi">
-            <div class="kpi-head"><span class="kpi-label">Despesas pagas</span><span class="kpi-icon red">${icon("arrow-down")}</span></div>
-            <div class="kpi-value">${money(s.despesasPagas)}</div>
-            <div class="kpi-foot">${delta(s.despesasPagas, prev.despesasPagas, false)}<span>vs. mês anterior</span></div>
+            <div class="kpi-head"><span class="kpi-label">Despesas do mês</span><span class="kpi-icon red">${icon("arrow-down")}</span></div>
+            <div class="kpi-value">${money(plan.despesas)}</div>
+            <div class="kpi-foot">${delta(plan.despesas, prevPlan.despesas, false)}<span>${money(s.despesasPagas)} pagos</span></div>
             ${FM.charts.spark(sparkDesp, "#e27c94")}
           </article>
           <article class="kpi">
-            <div class="kpi-head"><span class="kpi-label">Resultado realizado</span><span class="kpi-icon ${s.resultado >= 0 ? "green" : "red"}">${icon(s.resultado >= 0 ? "trending-up" : "trending-down")}</span></div>
-            <div class="kpi-value ${s.resultado >= 0 ? "pos" : "neg"}">${money(s.resultado)}</div>
-            <div class="kpi-foot"><span>Margem de ${s.receitasRecebidas ? pct(s.resultado / s.receitasRecebidas) : "—"} · receitas − despesas pagas</span></div>
+            <div class="kpi-head"><span class="kpi-label">Resultado do mês</span><span class="kpi-icon ${plan.saldo >= 0 ? "green" : "red"}">${icon(plan.saldo >= 0 ? "trending-up" : "trending-down")}</span></div>
+            <div class="kpi-value ${plan.saldo >= 0 ? "pos" : "neg"}">${money(plan.saldo)}</div>
+            <div class="kpi-foot"><span>Receitas − despesas registradas · margem de ${plan.receitas ? pct(plan.saldo / plan.receitas) : "—"}</span></div>
           </article>
         </div>
 
         <div class="grid grid-main">
           <section class="card">
             <div class="card-head">
-              <div><div class="card-title">${icon("trending-up")}Evolução do saldo</div><div class="card-sub">Saldo consolidado ao final de cada mês</div></div>
+              <div><div class="card-title">${icon("trending-up")}Evolução do saldo</div><div class="card-sub">Saldo disponível ao final de cada mês</div></div>
               <a class="card-link" href="#/fluxo-caixa">Fluxo completo ${icon("arrow-right")}</a>
             </div>
             <div class="card-body">
@@ -183,11 +193,11 @@
 
           <section class="card">
             <div class="card-head">
-              <div><div class="card-title">${icon("pie")}Despesas por categoria</div><div class="card-sub">Valores efetivamente pagos</div></div>
+              <div><div class="card-title">${icon("pie")}Despesas por categoria</div><div class="card-sub">Todos os valores registrados no mês</div></div>
               <a class="card-link" href="#/relatorios">Detalhar ${icon("arrow-right")}</a>
             </div>
             <div class="card-body">
-              ${donutItems.length ? FM.charts.donut({ items: donutItems, centerLabel: "Pago no mês", centerValue: moneyShort(s.despesasPagas) }) : FM.ui.emptyState("pie", "Sem despesas pagas", "As despesas aparecem aqui quando são baixadas no período.")}
+              ${donutItems.length ? FM.charts.donut({ items: donutItems, centerLabel: "Registrado no mês", centerValue: moneyShort(plan.despesas) }) : FM.ui.emptyState("pie", "Sem despesas registradas", "As despesas aparecem aqui assim que forem lançadas no período.")}
             </div>
           </section>
         </div>
@@ -211,10 +221,10 @@
 
           <section class="card">
             <div class="card-head">
-              <div><div class="card-title">${icon("target")}Orçamento do mês</div><div class="card-sub">${pct(budgetTotals.usage)} consumido no total</div></div>
-              <a class="card-link" href="#/orcamento">Ajustar ${icon("arrow-right")}</a>
+              <div><div class="card-title">${icon("credit-card")}Formas de pagamento</div><div class="card-sub">Distribuição das despesas registradas</div></div>
+              <a class="card-link" href="#/relatorios">Detalhar ${icon("arrow-right")}</a>
             </div>
-            <div class="card-body">${budgetRowsHtml}</div>
+            <div class="card-body">${methodRowsHtml}</div>
           </section>
 
           <section class="card">
@@ -291,21 +301,30 @@
       const rows = [
         ["Indicador", "Valor"],
         ["Mês de referência", monthLabel(month, "long")],
-        ["Saldo consolidado", money(cash)],
+        ["Saldo disponível", money(cash)],
+        ["Receitas registradas", money(plan.receitas)],
         ["Receitas recebidas", money(s.receitasRecebidas)],
+        ["Despesas registradas", money(plan.despesas)],
         ["Despesas pagas", money(s.despesasPagas)],
-        ["Resultado realizado", money(s.resultado)],
+        ["Resultado do mês", money(plan.saldo)],
+        ["Contas fixas", money(plan.fixas)],
+        ["Gastos do mês", money(plan.variaveis)],
+        ["Cartão de crédito", money(plan.cartao)],
+        ["Investimentos acumulados", money(investments)],
         ["A pagar em aberto", money(pay.total)],
         ["A receber em aberto", money(rec.total)],
         ["Saldo projetado próximo mês", money(next.saldoProjetado)],
         [],
-        ["Despesa por categoria", "Valor pago"],
-        ...C.categorySpend(month, "despesa").map((c) => [c.name, money(c.total)]),
+        ["Despesa por categoria", "Valor registrado"],
+        ...C.categoryPlan(month, "despesa").map((c) => [c.name, money(c.total)]),
+        [],
+        ["Forma de pagamento", "Valor registrado"],
+        ...methods.map((m) => [m.name, money(m.total)]),
         [],
         ["Orçamento", "Planejado", "Realizado"],
         ...budgets.map((b) => [`${b.category} (${b.costCenter})`, money(b.planned), money(b.actual)]),
       ];
-      U.downloadCSV(`luvis-finance-resumo-${month}.csv`, ["Resumo financeiro Luvis Finance"], rows);
+      U.downloadCSV(`livis-finance-resumo-${month}.csv`, ["Resumo financeiro Livis Finance"], rows);
       FM.ui.toast("Resumo exportado em CSV.", "success");
     });
   };

@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — Transferências, fluxo de caixa, contas e conciliação
+   LIVIS FINANCE — Transferências, fluxo de caixa, contas e conciliação
    ========================================================= */
 (function () {
   "use strict";
@@ -122,7 +122,7 @@
             <div class="kpi-foot"><span>Lançadas como despesa financeira</span></div>
           </article>
           <article class="kpi">
-            <div class="kpi-head"><span class="kpi-label">Saldo consolidado</span><span class="kpi-icon green">${icon("wallet")}</span></div>
+            <div class="kpi-head"><span class="kpi-label">Saldo disponível</span><span class="kpi-icon green">${icon("wallet")}</span></div>
             <div class="kpi-value">${money(calc.consolidatedBalance())}</div>
             <div class="kpi-foot"><span>Transferências não alteram este total</span></div>
           </article>
@@ -233,7 +233,7 @@
             <button class="btn ghost sm" id="flow-export">${icon("download")}Exportar</button>
           </div>
         </div>
-        <div class="print-head"><strong>Fluxo de caixa — ${esc(monthLabel(ctx.month, "long"))}</strong><span>Luvis Finance · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Fluxo de caixa — ${esc(monthLabel(ctx.month, "long"))}</strong><span>Livis Finance · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="kpi-grid">
           <article class="kpi hero">
@@ -340,7 +340,7 @@
 
     mount.querySelector("#flow-print").addEventListener("click", () => window.print());
     mount.querySelector("#flow-export").addEventListener("click", () => {
-      U.downloadCSV(`luvis-finance-fluxo-${ctx.month}.csv`,
+      U.downloadCSV(`livis-finance-fluxo-${ctx.month}.csv`,
         ["Mês", "Receitas recebidas", "Despesas pagas", "Resultado", "A receber", "A pagar", "Saldo projetado"],
         stats.map((s) => [monthLabel(s.key, "long"), money(s.receitasRecebidas), money(s.despesasPagas), money(s.resultado), money(s.entradasPrevistas), money(s.saidasPrevistas), money(projMap[s.key])]));
       FM.ui.toast("Fluxo de caixa exportado em CSV.");
@@ -352,7 +352,7 @@
      ========================================================= */
   function openAccountForm(acc) {
     const active = !acc || acc.active !== false;
-    const types = ["Conta corrente", "Poupança", "Caixa", "Cartão", "Investimento", "Outro"];
+    const types = ["Conta corrente", "Poupança", "Caixa", "Cartão de crédito", "Investimento", "Outro"];
     const body = `
       <div class="form-grid">
         <div class="field full"><label>Nome da conta</label><input class="input" name="name" value="${acc ? esc(acc.name) : ""}" placeholder="Ex.: Banco principal"></div>
@@ -390,7 +390,7 @@
     const accounts = st().accounts;
     const total = calc.consolidatedBalance();
     let entradaMes = 0, saidaMes = 0;
-    accounts.forEach((a) => {
+    accounts.filter((a) => calc.isCashAccount(a)).forEach((a) => {
       const f = accountFlow(a.id, ctx.month);
       entradaMes += f.entrada;
       saidaMes += f.saida;
@@ -412,7 +412,7 @@
           </div>
         </div>
         <div class="account-balance ${bal < 0 ? "text-red" : ""}">${money(bal)}</div>
-        <div class="small muted">${pct(Math.abs(share))} do saldo consolidado</div>
+        <div class="small muted">${a.type === "Cartão de crédito" || a.type === "Cartão" ? "Fatura atual das compras registradas" : a.type === "Investimento" ? "Saldo de investimento" : `${pct(Math.abs(share))} do saldo disponível`}</div>
         <div class="account-foot">
           <span>${icon("arrow-up")} +${moneyShort(flow.entrada)}</span>
           <span>${icon("arrow-down")} −${moneyShort(flow.saida)}</span>
@@ -428,11 +428,11 @@
     mount.innerHTML = `
       <div class="page-enter">
         <div class="content-head">
-          <div><h2>Contas bancárias</h2><p>Saldos individuais calculados a partir do saldo inicial, baixas e transferências.</p></div>
+          <div><h2>Contas e investimentos</h2><p>Acompanhe saldo disponível, faturas dos cartões e valores reservados ou investidos.</p></div>
           <div class="content-actions"><button class="btn primary sm" id="new-account">${icon("plus")}Nova conta</button></div>
         </div>
         <div class="summary-row" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;padding:14px 18px">
-          <div class="mini-stat"><span>Saldo consolidado</span><strong class="${total < 0 ? "text-red" : "text-green"}">${money(total)}</strong></div>
+          <div class="mini-stat"><span>Saldo disponível</span><strong class="${total < 0 ? "text-red" : "text-green"}">${money(total)}</strong></div>
           <div class="mini-stat"><span>Contas ativas</span><strong>${accounts.filter((a) => a.active).length} de ${accounts.length}</strong></div>
           <div class="mini-stat"><span>Entradas em ${esc(monthLabel(ctx.month, "short"))}</span><strong class="text-green">${money(entradaMes)}</strong></div>
           <div class="mini-stat"><span>Saídas em ${esc(monthLabel(ctx.month, "short"))}</span><strong class="text-red">${money(saidaMes)}</strong></div>
@@ -441,9 +441,10 @@
         <div class="card mt-16"><div class="card-body">
           <div class="card-title">${icon("info")}Como o saldo é calculado</div>
           <ul class="tip-list mt-8">
-            <li><b>Saldo da conta</b> = saldo inicial + receitas baixadas − despesas baixadas ± transferências.</li>
+            <li><b>Saldo disponível</b> soma contas e caixa; cartões e investimentos ficam separados.</li>
+            <li><b>Fatura do cartão</b> mostra as compras registradas naquele cartão. Transferências da conta para o cartão liquidam a fatatura.</li>
+            <li><b>Investimentos</b> recebem transferências e não entram como receita ou despesa.</li>
             <li>Lançamentos <b>previstos</b> não alteram o saldo até serem baixados — use o fluxo de caixa para ver o projetado.</li>
-            <li>Contas inativas continuam no histórico: não podem ser escolhidas em novos lançamentos.</li>
           </ul>
         </div></div>
       </div>
@@ -484,6 +485,7 @@
         F.type = "all";
         F.status = "all";
         F.category = "all";
+        F.section = "all";
         F.q = "";
         location.hash = "#/lancamentos";
       });

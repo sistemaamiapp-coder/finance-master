@@ -1,5 +1,5 @@
 /* =========================================================
-   FINANCE MASTER — roteador e inicialização
+   LIVIS FINANCE — roteador e inicialização
    ========================================================= */
 (function () {
   "use strict";
@@ -16,7 +16,7 @@
     transferencias: { title: "Transferências", sub: "Movimentação entre contas", period: false },
     parcelamentos: { title: "Parcelamentos", sub: "Compras e compromissos parcelados", period: false },
     "fluxo-caixa": { title: "Fluxo de caixa", sub: "Realizado e projeção de caixa", period: true },
-    contas: { title: "Contas bancárias", sub: "Saldos por conta financeira", period: true },
+    contas: { title: "Contas e investimentos", sub: "Saldos, cartões e aplicações", period: true },
     conciliacao: { title: "Conciliação", sub: "Extrato bancário x sistema", period: false },
     orcamento: { title: "Orçamento", sub: "Planejado x realizado", period: true },
     categorias: { title: "Categorias", sub: "Classificação financeira", period: true },
@@ -45,7 +45,7 @@
   function updateChrome() {
     const state = FM.store.state;
     const meta = state.meta || {};
-    const org = meta.org || "Luvis Finance";
+    const org = meta.org || "Livis Finance";
 
     const orgName = $("#org-name");
     if (orgName) orgName.textContent = org;
@@ -100,7 +100,7 @@
     const subEl = $("#page-sub");
     if (titleEl) titleEl.textContent = meta.title;
     if (subEl) subEl.textContent = meta.sub;
-    document.title = `${meta.title} — Luvis Finance`;
+    document.title = `${meta.title} — Livis Finance`;
 
     const period = $("#period-control");
     if (period) period.hidden = !meta.period;
