@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — Transferências, fluxo de caixa, contas e conciliação
+   MEU LAR FINANCEIRO — Transferências, fluxo de caixa, contas e conciliação
    ========================================================= */
 (function () {
   "use strict";
@@ -33,8 +33,8 @@
     const cat = C();
     const body = `
       <div class="form-grid">
-        <div class="field"><label>Conta de origem</label><select class="select" name="fromAccount">${FM.ui.accountOptions("")}</select></div>
-        <div class="field"><label>Conta de destino</label><select class="select" name="toAccount">${FM.ui.accountOptions("ACC-002")}</select></div>
+        <div class="field"><label>Conta de origem</label><select class="select" name="fromAccount">${FM.ui.accountOptions("", false, "excludeCards")}</select></div>
+        <div class="field"><label>Conta de destino</label><select class="select" name="toAccount">${FM.ui.accountOptions("ACC-002", false, "excludeCards")}</select></div>
         <div class="field"><label>Valor</label><div class="money-wrap"><span>R$</span><input class="input money" name="amount" inputmode="decimal" placeholder="0,00"></div></div>
         <div class="field"><label>Data</label><input class="input" type="date" name="date" value="${todayISO()}"></div>
         <div class="field"><label>Taxa (opcional)</label><div class="money-wrap"><span>R$</span><input class="input money" name="fee" inputmode="decimal" placeholder="0,00"></div></div>
@@ -233,7 +233,7 @@
             <button class="btn ghost sm" id="flow-export">${icon("download")}Exportar</button>
           </div>
         </div>
-        <div class="print-head"><strong>Fluxo de caixa — ${esc(monthLabel(ctx.month, "long"))}</strong><span>Livis Finance · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Fluxo de caixa — ${esc(monthLabel(ctx.month, "long"))}</strong><span>Meu Lar Financeiro · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="kpi-grid">
           <article class="kpi hero">
@@ -329,7 +329,7 @@
             <div class="card-title">${icon("shield")}Dicas de controle futuro</div>
             <ul class="tip-list mt-8">
               <li>Mantenha de 3 a 6 meses de despesas médias em reserva. Hoje: <b>${runway > 0 ? runway.toFixed(1) + " mês(es)" : "—"}</b>.</li>
-              <li>Revise semanalmente os vencimentos dos próximos 7 dias antes de autorizar novos gastos.</li>
+              <li>Revise os vencimentos dos próximos ${FM.calc.notificationSettings().dueDays} dias antes de autorizar novos gastos.</li>
               <li>Cadastre receitas previstas assim que forem contratadas: a projeção antecipa apertos de caixa.</li>
               <li>Nunca use a conta de reserva para despesa operacional sem registrar a transferência.</li>
             </ul>
@@ -340,7 +340,7 @@
 
     mount.querySelector("#flow-print").addEventListener("click", () => window.print());
     mount.querySelector("#flow-export").addEventListener("click", () => {
-      U.downloadCSV(`livis-finance-fluxo-${ctx.month}.csv`,
+      U.downloadCSV(`meu-lar-financeiro-fluxo-${ctx.month}.csv`,
         ["Mês", "Receitas recebidas", "Despesas pagas", "Resultado", "A receber", "A pagar", "Saldo projetado"],
         stats.map((s) => [monthLabel(s.key, "long"), money(s.receitasRecebidas), money(s.despesasPagas), money(s.resultado), money(s.entradasPrevistas), money(s.saidasPrevistas), money(projMap[s.key])]));
       FM.ui.toast("Fluxo de caixa exportado em CSV.");
@@ -362,7 +362,17 @@
         </select></div>
         <div class="field"><label>Saldo inicial</label><div class="money-wrap"><span>R$</span><input class="input money" name="openingBalance" inputmode="decimal" value="${acc ? String(acc.openingBalance).replace(".", ",") : "0,00"}"></div></div>
         <div class="field"><label>Situação</label><label class="check" style="height:38px"><input type="checkbox" name="active" ${active ? "checked" : ""}> Conta ativa</label></div>
+        <div class="card-form-fields full" data-card-fields ${acc?.type === "Cartão de crédito" ? "" : "hidden"}>
+          <div class="form-grid">
+            <div class="field"><label>Limite (0 = não configurado)</label><div class="money-wrap"><span>R$</span><input class="input money" name="limit" inputmode="decimal" value="${acc ? String(acc.limit || 0).replace(".", ",") : "0,00"}"></div></div>
+            <div class="field"><label>Bandeira</label><input class="input" name="brand" value="${acc ? esc(acc.brand || "") : ""}" placeholder="Ex.: Mastercard"></div>
+            <div class="field"><label>Dia de fechamento</label><input class="input" type="number" min="1" max="31" name="closingDay" value="${acc?.closingDay || 31}"></div>
+            <div class="field"><label>Dia de vencimento</label><input class="input" type="number" min="1" max="31" name="dueDay" value="${acc?.dueDay || 31}"></div>
+            <div class="field full"><label>Cor do cartão</label><input class="input" type="color" name="color" value="${/^#[0-9a-f]{6}$/i.test(acc?.color || "") ? acc.color : "#7c6a9c"}"></div>
+          </div>
+        </div>
       </div>
+      ${FM.attachments?.available() ? (acc ? `<div class="form-section" data-attachment-manager="account:${esc(acc.id)}"></div>` : FM.attachments.inputField()) : ""}
       <p class="modal-note mt-12">O saldo inicial é a posição da conta antes do primeiro lançamento registrado. O saldo atual é calculado automaticamente.</p>
     `;
     FM.ui.modalForm({
@@ -372,15 +382,32 @@
       size: "lg",
       submitLabel: acc ? "Salvar alterações" : "Criar conta",
       submitIcon: "check",
-      onSubmit(fd) {
-        FM.actions.saveAccount({
+      async onSubmit(fd, form) {
+        const saved = await FM.actions.saveAccount({
           name: fd.get("name"),
           institution: fd.get("institution"),
           type: fd.get("type"),
           openingBalance: fd.get("openingBalance"),
           active: !!fd.get("active"),
+          limit: fd.get("limit"),
+          brand: fd.get("brand"),
+          closingDay: fd.get("closingDay"),
+          dueDay: fd.get("dueDay"),
+          color: fd.get("color"),
         }, acc ? acc.id : null);
+        const files = [...(form.querySelector("[data-attachment-input]")?.files || [])];
+        if (files.length) {
+          try { await FM.attachments.upload("account", saved.id, files); }
+          catch (error) { FM.ui.toast("A conta foi salva, mas o comprovante não foi enviado. Tente novamente ao editar a conta.", "error"); }
+        }
         FM.ui.toast(acc ? "Conta atualizada." : "Conta criada.");
+      },
+      onMount(ov, close, form) {
+        const attachmentManager = ov.querySelector("[data-attachment-manager]");
+        if (attachmentManager) FM.attachments.mount(attachmentManager, "account", acc.id);
+        const type = form.querySelector('select[name="type"]');
+        const fields = form.querySelector("[data-card-fields]");
+        type.addEventListener("change", () => { fields.hidden = type.value !== "Cartão de crédito"; });
       },
     });
   }
@@ -400,6 +427,8 @@
       const bal = calc.accountBalance(a.id);
       const flow = accountFlow(a.id, ctx.month);
       const share = total !== 0 ? bal / total : 0;
+      const isCard = a.type === "Cartão de crédito";
+      const limit = isCard ? calc.cardSummary(a.id) : null;
       return `<article class="account-card">
         <div class="account-top">
           <div>
@@ -412,7 +441,7 @@
           </div>
         </div>
         <div class="account-balance ${bal < 0 ? "text-red" : ""}">${money(bal)}</div>
-        <div class="small muted">${a.type === "Cartão de crédito" || a.type === "Cartão" ? "Fatura atual das compras registradas" : a.type === "Investimento" ? "Saldo de investimento" : `${pct(Math.abs(share))} do saldo disponível`}</div>
+        <div class="small muted">${isCard ? `Limite utilizado ${money(limit.used)} de ${limit.total > 0 ? money(limit.total) : "não configurado"} · disponível ${money(limit.available)}` : a.type === "Investimento" ? "Saldo de investimento" : `${pct(Math.abs(share))} do saldo disponível`}</div>
         <div class="account-foot">
           <span>${icon("arrow-up")} +${moneyShort(flow.entrada)}</span>
           <span>${icon("arrow-down")} −${moneyShort(flow.saida)}</span>
@@ -420,6 +449,7 @@
         </div>
         <div class="mt-12" style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn sm subtle" data-view-acc="${esc(a.id)}">${icon("receipt")}Lançamentos</button>
+          ${isCard ? `<button class="btn sm ghost" data-card-detail="${esc(a.id)}">${icon("credit-card")}Faturas</button>` : ""}
           <button class="btn sm ghost" data-toggle-acc="${esc(a.id)}">${a.active ? "Desativar" : "Reativar"}</button>
         </div>
       </article>`;
@@ -442,7 +472,7 @@
           <div class="card-title">${icon("info")}Como o saldo é calculado</div>
           <ul class="tip-list mt-8">
             <li><b>Saldo disponível</b> soma contas e caixa; cartões e investimentos ficam separados.</li>
-            <li><b>Fatura do cartão</b> mostra as compras registradas naquele cartão. Transferências da conta para o cartão liquidam a fatatura.</li>
+            <li><b>Fatura do cartão</b> reúne as compras por competência. O caixa muda quando a fatura é paga em <b>Cartões e faturas</b>.</li>
             <li><b>Investimentos</b> recebem transferências e não entram como receita ou despesa.</li>
             <li>Lançamentos <b>previstos</b> não alteram o saldo até serem baixados — use o fluxo de caixa para ver o projetado.</li>
           </ul>
@@ -476,6 +506,9 @@
         FM.actions.toggleAccount(acc.id);
         FM.ui.toast(acc.active ? "Conta desativada." : "Conta reativada.", "info");
       });
+    });
+    mount.querySelectorAll("[data-card-detail]").forEach((b) => {
+      b.addEventListener("click", () => FM.app.go(`cartoes?card=${encodeURIComponent(b.dataset.cardDetail)}`));
     });
     mount.querySelectorAll("[data-view-acc]").forEach((b) => {
       b.addEventListener("click", () => {

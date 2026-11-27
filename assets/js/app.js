@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — roteador e inicialização
+   MEU LAR FINANCEIRO — roteador e inicialização
    ========================================================= */
 (function () {
   "use strict";
@@ -15,14 +15,21 @@
     "a-receber": { title: "Contas a receber", sub: "Cobranças e recebíveis", period: false },
     transferencias: { title: "Transferências", sub: "Movimentação entre contas", period: false },
     parcelamentos: { title: "Parcelamentos", sub: "Compras e compromissos parcelados", period: false },
+    recorrencias: { title: "Recorrências", sub: "Compromissos e receitas programados", period: false },
     "fluxo-caixa": { title: "Fluxo de caixa", sub: "Realizado e projeção de caixa", period: true },
     contas: { title: "Contas e investimentos", sub: "Saldos, cartões e aplicações", period: true },
+    cartoes: { title: "Cartões e faturas", sub: "Limite, compras e pagamentos por competência", period: false },
     conciliacao: { title: "Conciliação", sub: "Extrato bancário x sistema", period: false },
     orcamento: { title: "Orçamento", sub: "Planejado x realizado", period: true },
+    compras: { title: "Compras domésticas", sub: "Listas, orçamento e compras realizadas", period: false },
+    lembretes: { title: "Lembretes", sub: "Anotações e compromissos da família", period: false },
+    metas: { title: "Metas e economias", sub: "Objetivos, reservas e progresso", period: true },
     categorias: { title: "Categorias", sub: "Classificação financeira", period: true },
     centros: { title: "Centros de custo", sub: "Áreas, projetos e responsáveis", period: true },
     dre: { title: "DRE gerencial", sub: "Resultado do período", period: true },
     relatorios: { title: "Relatórios", sub: "Exportações e relatório impresso", period: true },
+    extrato: { title: "Extrato por período", sub: "Movimentações e saldos por datas e conta", period: false },
+    "resumo-anual": { title: "Resumo anual", sub: "Resultado, investimentos e ofertantes", period: false },
     guia: { title: "Guia & dicas", sub: "Regras, rotinas e evolução", period: false },
     configuracoes: { title: "Configurações", sub: "Preferências, listas e backup", period: false },
   };
@@ -45,15 +52,19 @@
   function updateChrome() {
     const state = FM.store.state;
     const meta = state.meta || {};
-    const org = meta.org || "Livis Finance";
+    const org = meta.org || "Meu Lar Financeiro";
+    const profile = meta.name || FM.api.user?.name || org;
 
     const orgName = $("#org-name");
-    if (orgName) orgName.textContent = org;
+    if (orgName) orgName.textContent = profile;
     const avatar = $("#org-avatar");
     if (avatar) {
-      const initials = org.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-      avatar.textContent = initials || "LF";
+      const initials = profile.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+      avatar.textContent = initials || "ML";
     }
+    const storageLabel = $("#storage-label");
+    if (storageLabel) storageLabel.textContent = FM.store.remote ? "Dados protegidos na sua conta" : "Dados neste navegador";
+    document.querySelectorAll("[data-auth-only]").forEach((element) => { element.hidden = !FM.store.remote; });
 
     const calc = FM.calc;
     const pay = calc.openTotals("despesa");
@@ -100,7 +111,7 @@
     const subEl = $("#page-sub");
     if (titleEl) titleEl.textContent = meta.title;
     if (subEl) subEl.textContent = meta.sub;
-    document.title = `${meta.title} — Livis Finance`;
+    document.title = `${meta.title} — Meu Lar Financeiro`;
 
     const period = $("#period-control");
     if (period) period.hidden = !meta.period;
@@ -296,13 +307,70 @@
     });
   }
 
-  function init() {
-    FM.store.init();
+  async function startAuthenticated() {
+    const localState = FM.store.state;
+    const importLocal = FM.store.allowLocalMigration && FM.store.hasLocalData();
+    const workspace = await FM.store.loadRemote();
+    FM.store.allowLocalMigration = false;
+    if (workspace.revision === 0 && importLocal) {
+      FM.store.state = localState;
+      FM.store.state.meta.name = FM.store.state.meta.name || FM.api.user?.name || "";
+      FM.store.addAudit("Dados locais migrados", "Sistema", "—", "Dados deste navegador enviados para a conta autenticada.");
+      await FM.store.save({ silent: true });
+      FM.ui.toast("Dados deste navegador migrados para sua conta.", "success");
+    }
+    FM.auth.hide();
+    if (!location.hash) history.replaceState(null, "", "#/dashboard");
+    lastRoute = currentRoute();
+    render();
+  }
+
+  function startLocal() {
+    FM.store.remote = false;
+    FM.auth.hide();
+    if (!location.hash) history.replaceState(null, "", "#/dashboard");
+    lastRoute = currentRoute();
+    render();
+  }
+
+  async function logout() {
+    const ok = await FM.ui.confirm({
+      title: "Sair da conta",
+      message: "Os dados salvos no servidor continuarão disponíveis quando você entrar novamente.",
+      confirmLabel: "Sair",
+    });
+    if (!ok) return;
+    try {
+      await FM.api.logout();
+    } catch (error) {
+      FM.ui.toast(error.message || "Não foi possível encerrar a sessão.", "error");
+      return;
+    }
+    FM.store.remote = false;
+    FM.store.allowLocalMigration = false;
+    FM.store.state = null;
+    if (FM.theme) FM.theme.apply("light");
+    FM.auth.show(startAuthenticated);
+  }
+
+  async function init() {
+    await FM.store.init();
     bindSidebar();
     bindPeriod();
     bindSearch();
     bindActions();
     bindNav();
+
+    const logoutButton = $("#logout-btn");
+    if (logoutButton) logoutButton.addEventListener("click", logout);
+    window.addEventListener("meular:unauthorized", () => {
+      if (!FM.store.remote) return;
+      FM.store.remote = false;
+      FM.store.state = null;
+      if (FM.theme) FM.theme.apply("light");
+      FM.auth.show(startAuthenticated);
+      FM.ui.toast("Sua sessão expirou. Entre novamente para continuar.", "warn");
+    });
 
     FM.app = {
       renderCurrent: render,
@@ -311,13 +379,24 @@
         location.hash = "#/" + route;
       },
       routes: ROUTES,
+      authenticated: startAuthenticated,
+      async logout() { await logout(); },
     };
 
-    if (!location.hash) {
-      history.replaceState(null, "", "#/dashboard");
+    await FM.api.detect();
+    if (FM.api.available) {
+      try {
+        const user = await FM.api.me();
+        if (user) await startAuthenticated();
+        else FM.auth.show(startAuthenticated);
+        return;
+      } catch (error) {
+        FM.auth.show(startAuthenticated);
+        FM.ui.toast(error.message || "Não foi possível carregar sua conta.", "error");
+        return;
+      }
     }
-    lastRoute = currentRoute();
-    render();
+    startLocal();
   }
 
   if (document.readyState === "loading") {

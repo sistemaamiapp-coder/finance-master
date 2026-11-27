@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — Dashboard
+   MEU LAR FINANCEIRO — Dashboard
    ========================================================= */
 (function () {
   "use strict";
@@ -52,6 +52,7 @@
     const prevPlan = C.monthPlan(addMonthsKey(month, -1));
     const cash = C.consolidatedBalance(U.monthEnd(month));
     const investments = C.investmentBalance(U.monthEnd(month));
+    const goalsReserved = U.round2(st.goals.filter((goal) => goal.status !== "cancelled" && goal.startDate <= U.monthEnd(month)).reduce((total, goal) => total + U.num(goal.initialAmount) + (goal.movements || []).filter((movement) => movement.date <= U.monthEnd(month)).reduce((sum, movement) => sum + (movement.type === "retirada" ? -U.num(movement.amount) : U.num(movement.amount)), 0), 0));
     const cashCount = st.accounts.filter((a) => C.isCashAccount(a)).length;
     const pay = C.openTotals("despesa");
     const rec = C.openTotals("receita");
@@ -149,7 +150,7 @@
             <div class="mini-stat"><span>Contas fixas</span><strong class="text-red">${money(plan.fixas)}</strong><small class="muted">compromissos recorrentes</small></div>
             <div class="mini-stat"><span>Gastos do mês</span><strong class="text-red">${money(plan.variaveis)}</strong><small class="muted">compras e imprevistos</small></div>
             <div class="mini-stat"><span>Cartão de crédito</span><strong class="text-red">${money(plan.cartao)}</strong><small class="muted">compras nos cartões</small></div>
-            <div class="mini-stat"><span>Investimentos</span><strong class="text-green">${money(investments)}</strong><small class="muted">saldo reservado e aplicado</small></div>
+            <div class="mini-stat"><span>Reservas e investimentos</span><strong class="text-green">${money(investments)}</strong><small class="muted">${money(goalsReserved)} em metas · <a href="#/metas">ver metas</a></small></div>
           </div>
         </div>
 
@@ -324,7 +325,7 @@
         ["Orçamento", "Planejado", "Realizado"],
         ...budgets.map((b) => [`${b.category} (${b.costCenter})`, money(b.planned), money(b.actual)]),
       ];
-      U.downloadCSV(`livis-finance-resumo-${month}.csv`, ["Resumo financeiro Livis Finance"], rows);
+      U.downloadCSV(`meu-lar-financeiro-resumo-${month}.csv`, ["Resumo financeiro Meu Lar Financeiro"], rows);
       FM.ui.toast("Resumo exportado em CSV.", "success");
     });
   };

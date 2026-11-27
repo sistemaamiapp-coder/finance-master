@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.local
+*.log
+coverage/
+.DS_Store
+Thumbs.db
+.private-data/
+*.local-attachments/

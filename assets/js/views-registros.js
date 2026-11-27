@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — Lançamentos, contas a pagar/receber, parcelamentos
+   MEU LAR FINANCEIRO — Lançamentos, contas a pagar/receber, parcelamentos
    ========================================================= */
 (function () {
   "use strict";
@@ -19,7 +19,9 @@
   function paymentButtons(t) {
     const C = FM.calc;
     if (C.isCancelled(t)) return "";
-    const pay = C.isOpen(t) ? `<button class="icon-btn sm" data-open-payment="${t.id}" title="${t.type === "receita" ? "Registrar recebimento" : "Registrar pagamento"}">${icon("check")}</button>` : "";
+    const pay = C.isCardPurchase(t)
+      ? `<button class="icon-btn sm" data-open-payment="${t.id}" title="Abrir fatura">${icon("credit-card")}</button>`
+      : C.isOpen(t) ? `<button class="icon-btn sm" data-open-payment="${t.id}" title="${t.type === "receita" ? "Registrar recebimento" : "Registrar pagamento"}">${icon("check")}</button>` : "";
     const edit = `<button class="icon-btn sm" data-edit-tx="${t.id}" title="Editar">${icon("edit")}</button>`;
     return pay + edit;
   }
@@ -64,7 +66,7 @@
 
     const accounts = st.accounts;
     const categories = Array.from(new Set(st.categories.map((c) => c.name))).sort();
-    const statuses = ["Previsto", "Pago", "Recebido", "Parcial", "Atrasado", "Cancelado"];
+    const statuses = ["Previsto", "Pago", "Recebido", "Parcial", "Atrasado", "Em fatura", "Cancelado"];
 
     function filtered() {
       return st.transactions
@@ -89,7 +91,7 @@
       list.forEach((t) => {
         if (C.isCancelled(t)) return;
         if (t.type === "receita") rec += U.num(t.amount); else desp += U.num(t.amount);
-        open += C.remaining(t);
+        if (C.isOpen(t)) open += C.remaining(t);
       });
       return { rec, desp, open };
     }
@@ -99,7 +101,8 @@
         <div class="content-head">
           <div><h2>Lançamentos</h2><p>Base central — registre cada operação uma única vez e mantenha o status atualizado.</p></div>
           <div class="content-actions">
-            <button class="btn ghost sm" id="tx-export">${icon("download")}Exportar</button>
+            <button class="btn ghost sm" id="tx-xlsx">${icon("download")}Excel</button>
+            <button class="btn ghost sm" id="tx-export">${icon("download")}CSV</button>
             <button class="btn primary sm" data-new-tx>${icon("plus")}Novo lançamento</button>
           </div>
         </div>
@@ -149,7 +152,7 @@
             </table>
           </div>
         </div>
-        <p class="small muted mt-12">${icon("info")} Clique em uma linha para abrir o detalhe, registrar baixas parciais, editar ou cancelar mantendo o histórico.</p>
+        <p class="small muted mt-12">${icon("info")} Clique em uma linha para abrir o detalhe. Compras de cartão são liquidadas pelo pagamento da fatura em <a class="link-btn" href="#/cartoes">Cartões e faturas</a>.</p>
       </div>
     `;
     mount.innerHTML = html;
@@ -188,6 +191,14 @@
       Object.assign(F, { q: "", type: "all", status: "all", account: "all", category: "all", section: "all", period: "month" });
       FM.app.renderCurrent();
     });
+    mount.querySelector("#tx-xlsx").addEventListener("click", () => {
+      try {
+        FM.exports.download(`meu-lar-financeiro-lancamentos-filtrados-${ctx.month}.xlsx`, [FM.exports.transactions(visible)]);
+        FM.ui.toast("Lançamentos filtrados exportados em Excel.");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível gerar a planilha.", "error");
+      }
+    });
     mount.querySelector("#tx-export").addEventListener("click", () => {
       const rows = visible.map((t) => [
         t.id, fmtDate(t.date), t.type === "receita" ? "Receita" : "Despesa", t.description, t.section || "",
@@ -195,7 +206,7 @@
         fmtDate(t.dueDate), fmtDate(t.paidDate), FM.calc.effectiveStatus(t),
         t.method, U.num(t.amount).toFixed(2).replace(".", ","), FM.calc.remaining(t).toFixed(2).replace(".", ","), t.note,
       ]);
-      U.downloadCSV(`livis-finance-lancamentos-${ctx.month}.csv`,
+      U.downloadCSV(`meu-lar-financeiro-lancamentos-${ctx.month}.csv`,
         ["ID", "Data", "Tipo", "Descrição", "Origem", "Categoria", "Conta", "Centro de custo", "Vencimento", "Baixa", "Status", "Forma", "Valor", "Em aberto", "Observação"],
         rows);
       FM.ui.toast("Lançamentos exportados em CSV.");
@@ -228,7 +239,7 @@
           const open = C.isOpen(t);
           if (filter === "open" && !open) return false;
           if (filter === "overdue" && !(open && t.dueDate < todayISO())) return false;
-          if (filter === "soon" && !(open && t.dueDate >= todayISO() && dayDiff(t.dueDate) <= 7)) return false;
+          if (filter === "soon" && !(open && t.dueDate >= todayISO() && dayDiff(t.dueDate) <= C.notificationSettings().dueDays)) return false;
           if (filter === "settled" && open) return false;
           if (q) {
             const hay = [t.description, t.category, t.subcategory, C.accountName(t.account), t.note, t.id].join(" ").toLowerCase();
@@ -264,7 +275,7 @@
               <div class="mini-stat"><span>Em aberto</span><strong class="${isRec ? "text-green" : "text-red"}">${money(openAll.total)}</strong></div>
               <div class="mini-stat"><span>Títulos abertos</span><strong>${openAll.count}</strong></div>
               <div class="mini-stat"><span>Vencidos</span><strong class="text-red">${money(openAll.overdue.total)}</strong></div>
-              <div class="mini-stat"><span>Vencem em 7 dias</span><strong class="text-amber">${money(openAll.soon.total)}</strong></div>
+              <div class="mini-stat"><span>Vencem em ${C.notificationSettings().dueDays} dias</span><strong class="text-amber">${money(openAll.soon.total)}</strong></div>
               <div class="mini-stat"><span>${isRec ? "Recebido" : "Pago"} em ${monthLabel(ctx.month, "short")}</span><strong>${money(settledThisMonth)}</strong></div>
             </div>
             <div class="toolbar">
@@ -327,7 +338,7 @@
         });
       });
       mount.querySelector("#pend-export").addEventListener("click", () => {
-        U.downloadCSV(`livis-finance-${isRec ? "a-receber" : "a-pagar"}.csv`,
+        U.downloadCSV(`meu-lar-financeiro-${isRec ? "a-receber" : "a-pagar"}.csv`,
           ["Vencimento", "Descrição", "Categoria", "Conta", "Valor", "Baixado", "Em aberto", "Status"],
           visible.map((t) => [fmtDate(t.dueDate), t.description, `${t.category} › ${t.subcategory}`, C.accountName(t.account), money(t.amount), money(C.paidTotal(t)), money(C.remaining(t)), C.effectiveStatus(t)]));
         FM.ui.toast("Arquivo CSV exportado.");
@@ -356,7 +367,7 @@
         <div class="field"><label>Data de emissão</label><input class="input" type="date" name="date" value="${todayISO()}"></div>
         <div class="field"><label>Categoria</label><select class="select" name="category" id="inst-cat">${FM.ui.categoryOptions("despesa")}</select></div>
         <div class="field"><label>Origem</label><select class="select" name="section">${(FM.store.state.settings.sections || []).map((s) => `<option ${s === "Gastos do mês" ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>
-        <div class="field"><label>Conta</label><select class="select" name="account">${FM.ui.accountOptions("")}</select></div>
+        <div class="field"><label>Conta</label><select class="select" name="account">${FM.ui.accountOptions("", false, "excludeCards")}</select></div>
         <div class="field"><label>Centro de custo</label><select class="select" name="costCenter">${FM.ui.costCenterOptions("")}</select></div>
         <div class="field"><label>Forma</label><select class="select" name="method">${FM.ui.methodOptions("Boleto")}</select></div>
       </div>

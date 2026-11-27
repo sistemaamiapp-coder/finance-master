@@ -1,0 +1,29 @@
+{
+  "name": "meu-lar-financeiro",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Organizador financeiro doméstico individual com frontend estático, API Express e PostgreSQL.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "node --watch backend/src/server.js",
+    "migrate": "node backend/src/migrate.js",
+    "test": "node --test tests/*.test.js",
+    "test:watch": "node --watch --test tests/*.test.js",
+    "check": "node --check backend/src/server.js && node --check backend/src/app.js && node --check backend/src/migrate.js && node --check backend/src/config/index.js && node --check backend/src/services/auth.js && node --check backend/src/services/errors.js && node --check backend/src/services/finance.js && node --check backend/src/services/attachments.js && node --check backend/src/repositories/memory.js && node --check backend/src/repositories/postgres.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
+  }
+}

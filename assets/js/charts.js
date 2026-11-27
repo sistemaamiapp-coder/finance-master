@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — gráficos SVG (offline, sem dependências)
+   MEU LAR FINANCEIRO — gráficos SVG (offline, sem dependências)
    ========================================================= */
 (function () {
   "use strict";

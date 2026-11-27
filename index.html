@@ -3,24 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Livis Finance — controle financeiro completo: dashboard, lançamentos, contas a pagar e receber, fluxo de caixa, orçamento, DRE e relatórios.">
-  <title>Livis Finance — Gestão Financeira</title>
-  <meta name="theme-color" content="#fff8fb">
-  <meta property="og:title" content="Livis Finance — Gestão Financeira">
-  <meta property="og:description" content="Controle financeiro completo: dashboard, lançamentos, contas a pagar e receber, fluxo de caixa, orçamento, DRE e relatórios.">
+  <meta name="description" content="Meu Lar Financeiro — organize seu dinheiro, cuide do seu lar e realize seus sonhos.">
+  <title>Meu Lar Financeiro — Organização financeira doméstica</title>
+  <meta name="theme-color" content="#fff9f5">
+  <meta property="og:title" content="Meu Lar Financeiro">
+  <meta property="og:description" content="Organize seu dinheiro, cuide do seu lar e realize seus sonhos.">
   <meta property="og:image" content="https://sistemaamiapp-coder.github.io/finance-master/assets/img/livis-finance-light-192.png">
-  <link rel="icon" type="image/png" sizes="64x64" href="assets/img/livis-finance-light-64.png">
-  <link rel="apple-touch-icon" href="assets/img/livis-finance-light-192.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/img/livis-finance-light-64.png" data-theme-icon="favicon">
+  <link rel="apple-touch-icon" href="assets/img/livis-finance-light-192.png" data-theme-icon="touch">
+  <link rel="manifest" href="manifest.webmanifest">
+  <script src="assets/js/theme.js"></script>
   <link rel="stylesheet" href="assets/css/main.css">
 </head>
 <body>
   <div class="app-shell" id="app-shell">
     <aside class="sidebar" id="sidebar" aria-label="Menu principal">
       <div class="brand">
-        <img class="logo-mark" src="assets/img/livis-finance-light-192.png" alt="Livis Finance">
+        <img class="logo-mark" src="assets/img/livis-finance-light-192.png" alt="Meu Lar Financeiro" data-theme-icon>
         <div class="brand-text">
-          <strong>Livis Finance</strong>
-          <span>Gestão financeira</span>
+          <strong>Meu Lar Financeiro</strong>
+          <span>Seu lar em equilíbrio</span>
         </div>
         <svg class="icon brand-flower" aria-hidden="true"><use href="#i-flower"></use></svg>
       </div>
@@ -49,6 +51,9 @@
         <a class="nav-item" href="#/parcelamentos" data-route="parcelamentos">
           <svg class="icon"><use href="#i-repeat"></use></svg><span>Parcelamentos</span>
         </a>
+        <a class="nav-item" href="#/recorrencias" data-route="recorrencias">
+          <svg class="icon"><use href="#i-repeat"></use></svg><span>Recorrências</span>
+        </a>
 
         <p class="nav-label">Caixa</p>
         <a class="nav-item" href="#/fluxo-caixa" data-route="fluxo-caixa">
@@ -57,6 +62,9 @@
         <a class="nav-item" href="#/contas" data-route="contas">
           <svg class="icon"><use href="#i-bank"></use></svg><span>Contas e investimentos</span>
         </a>
+        <a class="nav-item" href="#/cartoes" data-route="cartoes">
+          <svg class="icon"><use href="#i-credit-card"></use></svg><span>Cartões e faturas</span>
+        </a>
         <a class="nav-item" href="#/conciliacao" data-route="conciliacao">
           <svg class="icon"><use href="#i-check-circle"></use></svg><span>Conciliação</span>
         </a>
@@ -64,6 +72,15 @@
         <p class="nav-label">Planejamento</p>
         <a class="nav-item" href="#/orcamento" data-route="orcamento">
           <svg class="icon"><use href="#i-target"></use></svg><span>Orçamento</span>
+        </a>
+        <a class="nav-item" href="#/compras" data-route="compras">
+          <svg class="icon"><use href="#i-receipt"></use></svg><span>Compras domésticas</span>
+        </a>
+        <a class="nav-item" href="#/lembretes" data-route="lembretes">
+          <svg class="icon"><use href="#i-bell"></use></svg><span>Lembretes</span>
+        </a>
+        <a class="nav-item" href="#/metas" data-route="metas">
+          <svg class="icon"><use href="#i-wallet"></use></svg><span>Metas e economias</span>
         </a>
         <a class="nav-item" href="#/categorias" data-route="categorias">
           <svg class="icon"><use href="#i-tag"></use></svg><span>Categorias</span>
@@ -79,6 +96,12 @@
         <a class="nav-item" href="#/relatorios" data-route="relatorios">
           <svg class="icon"><use href="#i-file"></use></svg><span>Relatórios</span>
         </a>
+        <a class="nav-item" href="#/extrato" data-route="extrato">
+          <svg class="icon"><use href="#i-receipt"></use></svg><span>Extrato por período</span>
+        </a>
+        <a class="nav-item" href="#/resumo-anual" data-route="resumo-anual">
+          <svg class="icon"><use href="#i-trending-up"></use></svg><span>Resumo anual</span>
+        </a>
 
         <p class="nav-label">Sistema</p>
         <a class="nav-item" href="#/guia" data-route="guia">
@@ -91,11 +114,12 @@
 
       <div class="sidebar-foot">
         <div class="org-card">
-          <div class="org-avatar" id="org-avatar">LF</div>
+          <div class="org-avatar" id="org-avatar">ML</div>
           <div class="org-info">
-            <strong id="org-name">Livis Finance</strong>
-            <span>Dados neste navegador</span>
+            <strong id="org-name">Meu Lar Financeiro</strong>
+            <span id="storage-label">Dados neste navegador</span>
           </div>
+          <button class="icon-btn sm" id="logout-btn" data-auth-only title="Sair da conta" aria-label="Sair da conta" hidden><svg class="icon"><use href="#i-arrow-right"></use></svg></button>
         </div>
         <p class="sidebar-note">Balanceamento automático · backup em JSON</p>
       </div>
@@ -145,12 +169,13 @@
       <main id="view" class="view" tabindex="-1"></main>
 
       <footer class="app-footer">
-        <span>Livis Finance · controle financeiro pessoal</span>
+        <span>Meu Lar Financeiro · organização financeira doméstica</span>
         <span id="footer-date"></span>
       </footer>
     </div>
   </div>
 
+  <div id="auth-root" hidden></div>
   <div id="modal-root"></div>
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <div id="chart-tip" class="chart-tip" hidden></div>
@@ -169,6 +194,8 @@
     <symbol id="i-pie" viewBox="0 0 24 24"><path d="M22 12A10 10 0 1 1 12 2v10z"/><path d="M21.2 8.2A10 10 0 0 0 15.8 2.8V8h5.4z"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22.5z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M8 7h8M8 11h5"/></symbol>
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></symbol>
     <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a3 3 0 0 1 5.8 1c0 2-3 2.2-3 4"/><path d="M12 17h.01"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
@@ -214,13 +241,26 @@
     <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3v18M7 21h10"/><path d="M12 6 5 8l-2 6a4 4 0 0 0 8 0L5 8M19 8l-4 1-2 5M12 6l7 2 2 6a4 4 0 0 1-8 0l4-8"/></symbol>
   </svg>
 
+  <script src="assets/js/xlsx.js"></script>
   <script src="assets/js/store.js"></script>
+  <script src="assets/js/exports.js"></script>
   <script src="assets/js/charts.js"></script>
   <script src="assets/js/ui.js"></script>
   <script src="assets/js/views-dashboard.js"></script>
   <script src="assets/js/views-registros.js"></script>
   <script src="assets/js/views-caixa.js"></script>
+  <script src="assets/js/views-cartoes.js"></script>
   <script src="assets/js/views-planejamento.js"></script>
+  <script src="assets/js/views-extrato.js"></script>
+  <script src="assets/js/views-resumo-anual.js"></script>
+  <script src="assets/js/views-compras.js"></script>
+  <script src="assets/js/views-metas.js"></script>
+  <script src="assets/js/views-recorrencias.js"></script>
+  <script src="assets/js/views-lembretes.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/attachments.js"></script>
+  <script src="assets/js/auth.js"></script>
   <script src="assets/js/app.js"></script>
+  <script src="assets/js/pwa.js"></script>
 </body>
 </html>

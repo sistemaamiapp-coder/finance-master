@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — Orçamento, cadastros, DRE, relatórios, guia e configurações
+   MEU LAR FINANCEIRO — Orçamento, cadastros, DRE, relatórios, guia e configurações
    ========================================================= */
 (function () {
   "use strict";
@@ -63,11 +63,11 @@
 
     const cards = rows.length
       ? rows.map((r) => {
-          const cls = r.over ? "red" : r.usage >= 0.85 ? "amber" : "green";
+          const cls = r.critical || r.over ? "red" : r.warning ? "amber" : "green";
           return `<div class="budget-card ${r.over ? "over" : ""}">
             <div class="budget-card-head">
               <div><h4>${esc(r.category)}</h4><span>${esc(r.costCenter || "Todos os centros de custo")}</span></div>
-              ${r.over ? `<span class="badge danger"><span class="dot"></span>Estourado</span>` : r.usage >= 0.85 ? `<span class="badge warn"><span class="dot"></span>Atenção</span>` : `<span class="badge ok"><span class="dot"></span>Dentro</span>`}
+              ${r.critical || r.over ? `<span class="badge danger"><span class="dot"></span>Crítico</span>` : r.warning ? `<span class="badge warn"><span class="dot"></span>Atenção</span>` : `<span class="badge ok"><span class="dot"></span>Dentro</span>`}
             </div>
             <div class="progress tall ${cls}"><span style="width:${Math.min(r.usage * 100, 100).toFixed(1)}%"></span></div>
             <div class="budget-nums"><span>Realizado <b>${money(r.actual)}</b></span><span>Planejado <b>${money(r.planned)}</b></span></div>
@@ -362,6 +362,7 @@
 
   FM.views.centros = function (ctx, mount) {
     const calc = C();
+    const notifications = calc.notificationSettings();
     const centers = st().costCenters;
     const spendByCenter = new Map();
     calc.paymentsInMonth({ month: ctx.month, type: "despesa" }).forEach(({ tx, payment }) => {
@@ -381,9 +382,9 @@
       return `<div class="budget-card ${budget > 0 && usage > 1 ? "over" : ""}">
         <div class="budget-card-head">
           <div><h4>${esc(c.name)}</h4><span>${esc(c.owner || "Sem responsável")} · ${count} lançamento(s)</span></div>
-          ${budget > 0 ? `<span class="badge ${usage > 1 ? "danger" : usage >= 0.85 ? "warn" : "ok"}">${pct(usage)}</span>` : `<span class="badge muted">Sem referência</span>`}
+          ${budget > 0 ? `<span class="badge ${usage >= notifications.budgetCritical / 100 ? "danger" : usage >= notifications.budgetWarning / 100 ? "warn" : "ok"}">${pct(usage)}</span>` : `<span class="badge muted">Sem referência</span>`}
         </div>
-        <div class="progress tall ${budget > 0 && usage > 1 ? "red" : usage >= 0.85 ? "amber" : "green"}"><span style="width:${Math.min(usage * 100, 100).toFixed(1)}%"></span></div>
+        <div class="progress tall ${budget > 0 && usage >= notifications.budgetCritical / 100 ? "red" : usage >= notifications.budgetWarning / 100 ? "amber" : "green"}"><span style="width:${Math.min(usage * 100, 100).toFixed(1)}%"></span></div>
         <div class="budget-nums"><span>Gasto no mês <b>${money(spent)}</b></span><span>Referência <b>${budget > 0 ? money(budget) : "—"}</b></span></div>
         ${c.note ? `<p class="small muted">${esc(c.note)}</p>` : ""}
         <div class="row" style="gap:6px;justify-content:flex-end">
@@ -523,7 +524,7 @@
             <button class="btn ghost sm" id="dre-export">${icon("download")}Exportar</button>
           </div>
         </div>
-        <div class="print-head"><strong>DRE gerencial — ${esc(monthLabel(month, "long"))}</strong><span>Livis Finance · regime de caixa · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>DRE gerencial — ${esc(monthLabel(month, "long"))}</strong><span>Meu Lar Financeiro · regime de caixa · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="grid grid-3">
           <article class="kpi">
@@ -631,7 +632,7 @@
         ["Centro de custo", "Receitas", "Despesas", "Resultado"],
         ...ccRows.map((c) => [c.name, money(c.rec), money(c.desp), money(c.rec - c.desp)]),
       ];
-      U.downloadCSV(`livis-finance-dre-${month}.csv`, ["Indicador", "Valor"], rows);
+      U.downloadCSV(`meu-lar-financeiro-dre-${month}.csv`, ["Indicador", "Valor"], rows);
       FM.ui.toast("DRE exportado em CSV.");
     });
   };
@@ -664,12 +665,13 @@
     mount.innerHTML = `
       <div class="page-enter">
         <div class="content-head">
-          <div><h2>Relatórios</h2><p>Relatório gerencial de <b>${esc(monthLabel(month, "long"))}</b> e exportações em CSV (abre no Excel).</p></div>
+          <div><h2>Relatórios</h2><p>Relatório gerencial de <b>${esc(monthLabel(month, "long"))}</b> em PDF, Excel e CSV.</p></div>
           <div class="content-actions">
-            <button class="btn ghost sm" id="rep-print">${icon("printer")}Imprimir relatório</button>
+            <button class="btn ghost sm" id="rep-print">${icon("printer")}Imprimir / PDF</button>
+            <button class="btn primary sm" id="rep-xlsx">${icon("download")}Excel</button>
           </div>
         </div>
-        <div class="print-head"><strong>Relatório gerencial — ${esc(monthLabel(month, "long"))}</strong><span>${esc(st().meta.org)} · gerado em ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Relatório gerencial — ${esc(monthLabel(month, "long"))}</strong><span>${esc(st().meta.name || "Meu Lar Financeiro")} · gerado em ${fmtDate(todayISO())}</span></div>
 
         <div class="kpi-grid">
           <article class="kpi"><div class="kpi-head"><span class="kpi-label">Receitas recebidas</span><span class="kpi-icon green">${icon("arrow-up")}</span></div><div class="kpi-value">${money(s.receitasRecebidas)}</div><div class="kpi-foot"><span>${income.length} categorias</span></div></article>
@@ -727,17 +729,25 @@
     `;
 
     mount.querySelector("#rep-print").addEventListener("click", () => window.print());
+    mount.querySelector("#rep-xlsx").addEventListener("click", () => {
+      try {
+        FM.exports.download(`meu-lar-financeiro-relatorio-${month}.xlsx`, FM.exports.monthly(month));
+        FM.ui.toast("Relatório mensal exportado em Excel.");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível gerar a planilha.", "error");
+      }
+    });
 
     mount.querySelectorAll("[data-report]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const kind = btn.dataset.report;
-        let filename = `livis-finance-${kind}-${month}.csv`;
+        let filename = `meu-lar-financeiro-${kind}-${month}.csv`;
         let headers = ["Indicador", "Valor"];
         let rows = [];
         if (kind === "resumo") {
           rows = [
             ["Mês", monthLabel(month, "long")],
-            ["Organização", st().meta.org],
+            ["Organização", st().meta.name || "Meu Lar Financeiro"],
             ["Receitas recebidas", money(s.receitasRecebidas)],
             ["Despesas pagas", money(s.despesasPagas)],
             ["Resultado", money(s.resultado)],
@@ -758,7 +768,7 @@
         } else if (kind === "categorias") {
           headers = ["Tipo", "Categoria", "Valor realizado", "Lançamentos"];
           rows = income.map((c) => ["Receita", c.name, money(c.total), c.count]).concat(spend.map((c) => ["Despesa", c.name, money(c.total), c.count]));
-          filename = `livis-finance-categorias-${month}.csv`;
+          filename = `meu-lar-financeiro-categorias-${month}.csv`;
         } else if (kind === "orcamento") {
           headers = ["Categoria", "Centro de custo", "Planejado", "Realizado", "Disponível", "Uso %"];
           rows = budgets.rows.map((r) => [r.category, r.costCenter || "Todos", money(r.planned), money(r.actual), money(r.remaining), pct(r.usage)]);
@@ -782,19 +792,19 @@
      GUIA & DICAS
      ========================================================= */
   FM.views.guia = function (ctx, mount) {
-    const org = st().meta.org;
+    const org = st().meta.name || "Meu Lar Financeiro";
     mount.innerHTML = `
       <div class="page-enter">
         <div class="content-head">
           <div><h2>Guia de uso e dicas</h2><p>Regras do sistema, rotinas de controle e roteiro de evolução para ${esc(org)}.</p></div>
           <div class="content-actions"><button class="btn ghost sm" id="guide-print">${icon("printer")}Imprimir guia</button></div>
         </div>
-        <div class="print-head"><strong>Guia de uso — Livis Finance</strong><span>${esc(org)} · ${fmtDate(todayISO())}</span></div>
+        <div class="print-head"><strong>Guia de uso — Meu Lar Financeiro</strong><span>${esc(org)} · ${fmtDate(todayISO())}</span></div>
 
         <div class="guide-grid">
           <section class="card guide-card">
             <h3>${icon("sparkles")}Como o sistema pensa</h3>
-            <p>O Livis Finance usa uma <b>base central de lançamentos</b>. Contas a pagar/receber, DRE, fluxo e relatórios são visões derivadas — nunca digite o mesmo fato em dois lugares.</p>
+            <p>O Meu Lar Financeiro usa uma <b>base central de lançamentos</b>. Contas a pagar/receber, DRE, fluxo e relatórios são visões derivadas — nunca digite o mesmo fato em dois lugares.</p>
             <ul>
               <li><b>Status automático</b>: sem baixa e vencimento futuro = Previsto; sem baixa e vencido = Atrasado; com baixa parcial = Parcial; quitado = Pago/Recebido; cancelado preserva histórico.</li>
               <li><b>Baixa</b> é o momento em que o dinheiro se move. Só a baixa altera saldo e resultado realizado.</li>
@@ -836,7 +846,7 @@
             <h3>${icon("calendar")}Rotina de controle</h3>
             <p><b>Semanal</b></p>
             <ul>
-              <li>Confira vencimentos dos próximos 7 dias em Contas a pagar.</li>
+              <li>Confira vencimentos dos próximos ${C().notificationSettings().dueDays} dias em Contas a pagar.</li>
               <li>Registre baixas pendentes e cobranças em atraso.</li>
               <li>Olhe o saldo projetado no Fluxo de caixa antes de assumir novos gastos.</li>
             </ul>
@@ -869,19 +879,42 @@
             <div class="tip-note">Nunca “ajuste” um saldo lançando receita ou despesa fictícia. Corrija a origem: baixa errada, transferência não registrada ou tarifa esquecida.</div>
           </section>
 
+          <section class="card guide-card">
+            <h3>${icon("download")}Relatórios e extratos</h3>
+            <ul>
+              <li><b>Relatório mensal e resumo anual</b>: imprima em PDF ou baixe em Excel e CSV.</li>
+              <li><b>Lançamentos</b>: o Excel e o CSV respeitam os filtros aplicados na tela.</li>
+              <li><b>Extrato por período</b>: escolha datas e conta para acompanhar saldo inicial, movimentações e saldo final.</li>
+              <li><b>Backup JSON</b>: guarde uma cópia após os fechamentos importantes.</li>
+            </ul>
+            <div class="tip-note">O PDF é gerado pela impressão do navegador. Selecione “Salvar como PDF” e mantenha o fundo branco.</div>
+          </section>
+
+          <section class="card guide-card">
+            <h3>${icon("shield")}Conta, sincronização e instalação</h3>
+            <ul>
+              <li>Com o backend configurado, o login protege os dados e sincroniza o workspace na sua conta.</li>
+              <li>Na versão somente estática, os dados permanecem neste navegador e o backup JSON é essencial.</li>
+              <li>O aplicativo pode ser instalado pelo navegador em computador ou celular.</li>
+              <li>O modo offline carrega a interface já visitada; consultar ou alterar dados autenticados exige conexão.</li>
+              <li>O tema claro é o padrão; o escuro é opcional e fica salvo na sua conta.</li>
+            </ul>
+          </section>
+
           <section class="card guide-card wide">
-            <h3>${icon("flag")}Roteiro de evolução</h3>
-            <p><span class="phase-tag p1">Fase 1 · Essencial</span> Contas, categorias, lançamentos com status automático, contas a pagar/receber, dashboard, DRE e backup.</p>
-            <p><span class="phase-tag p2">Fase 2 · Gestão</span> Orçamento por categoria e centro, centros de custo, conciliação bancária, fluxo projetado, relatórios CSV e auditoria.</p>
-            <p><span class="phase-tag p3">Fase 3 · Avançado</span> Multiusuário com permissões, anexos de comprovantes, recorrência automática, alertas, importação de extrato (OFX/CSV), exportação PDF/Excel, multiempresa.</p>
-            <div class="tip-note">Próximo passo recomendado: importação de extrato para acelerar a conciliação e alertas automáticos de vencimento.</div>
+            <h3>${icon("flag")}Recursos e próximos passos</h3>
+            <p><span class="phase-tag p1">Disponível</span> Contas, categorias, lançamentos, cartões, faturas, orçamento, DRE, fluxo, conciliação, metas, compras, recorrências, lembretes e auditoria.</p>
+            <p><span class="phase-tag p2">Disponível</span> Relatórios em PDF, Excel e CSV, extrato personalizado, resumo anual, backup JSON e instalação como aplicativo.</p>
+            <p><span class="phase-tag p2">Disponível</span> Comprovantes em PDF, JPEG, PNG ou WebP (até 5 MiB) vinculados a lançamentos, contas, compras e faturas, com acesso privado.</p>
+            <p><span class="phase-tag p3">Em evolução</span> Importação de extrato OFX/CSV e permissões para mais de uma pessoa.</p>
+            <div class="tip-note">Próximo passo recomendado: manter os comprovantes anexados e a conciliação mensal em dia.</div>
           </section>
 
           <section class="card guide-card">
             <h3>${icon("trending-up")}Dicas de controle futuro</h3>
             <ul>
               <li><b>Recorrência</b>: automatize aluguel, salários e assinaturas — reduz esquecimento.</li>
-              <li><b>Alertas</b>: notificações de vencimento e de orçamento acima de 85%.</li>
+              <li><b>Alertas</b>: vencimentos em ${C().notificationSettings().dueDays} dias, orçamento em ${C().notificationSettings().budgetWarning}% e metas sem movimento há ${C().notificationSettings().goalInactivityDays} dias.</li>
               <li><b>Metas</b>: acompanhe reserva mínima e resultado acumulado do ano.</li>
               <li><b>Sazonalidade</b>: compare o mesmo mês de anos anteriores para prever picos.</li>
               <li><b>Metas por centro</b>: responsabilize áreas pelo consumo do orçamento.</li>
@@ -890,12 +923,13 @@
           </section>
 
           <section class="card guide-card">
-            <h3>${icon("info")}Limitações desta versão</h3>
+            <h3>${icon("info")}Limitações e cuidados</h3>
             <ul>
-              <li>Os dados ficam no <b>armazenamento local do navegador</b> deste computador.</li>
-              <li>Não há multiusuário, sincronização em nuvem nem bloqueio por senha.</li>
-              <li>Limpar os dados do navegador apaga tudo sem backup — exporte o JSON com frequência.</li>
-              <li>Relatórios são gerenciais e em CSV; não substituem contabilidade formal.</li>
+              <li>A sincronização e os comprovantes requerem o backend; o GitHub Pages sozinho funciona em modo local.</li>
+              <li>Cada workspace pertence a uma conta; ainda não há permissões para múltiplas pessoas.</li>
+              <li>Na versão somente estática, limpar os dados do navegador apaga tudo sem backup — exporte o JSON com frequência.</li>
+              <li>O modo offline não baixa novos dados nem envia alterações; aguarde a conexão antes de continuar.</li>
+              <li>Relatórios são gerenciais e não substituem contabilidade formal.</li>
             </ul>
             <div class="row mt-12" style="gap:8px;flex-wrap:wrap">
               <button class="btn sm subtle" id="guide-backup">${icon("download")}Baixar backup agora</button>
@@ -906,9 +940,13 @@
       </div>
     `;
     mount.querySelector("#guide-print").addEventListener("click", () => window.print());
-    mount.querySelector("#guide-backup").addEventListener("click", () => {
-      FM.store.exportJSON();
-      FM.ui.toast("Backup JSON baixado.");
+    mount.querySelector("#guide-backup").addEventListener("click", async () => {
+      try {
+        await FM.store.exportJSON();
+        FM.ui.toast("Backup JSON baixado.");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível baixar o backup.", "error");
+      }
     });
   };
 
@@ -917,7 +955,11 @@
      ========================================================= */
   FM.views.configuracoes = function (ctx, mount) {
     const meta = st().meta;
+    const settings = st().settings;
+    const notifications = FM.calc.notificationSettings();
     const sizeKb = (JSON.stringify(st()).length / 1024).toFixed(1);
+    const storageScope = FM.store.remote ? "na sua conta" : "neste navegador";
+    const accountEmail = FM.api.user?.email || meta.email || "";
 
     function listChips(kind) {
       return (st().settings[kind] || []).map((v) => `<span class="chip">${esc(v)}<button type="button" data-remove-list="${kind}|${esc(v)}" aria-label="Remover ${esc(v)}">${icon("x")}</button></span>`).join("");
@@ -926,7 +968,7 @@
     mount.innerHTML = `
       <div class="page-enter">
         <div class="content-head">
-          <div><h2>Configurações</h2><p>Identidade, listas auxiliares, backup e segurança dos dados locais.</p></div>
+          <div><h2>Configurações</h2><p>Identidade, listas auxiliares, backup e segurança dos dados ${storageScope}.</p></div>
           <div class="content-actions"><span class="badge muted">${sizeKb} KB armazenados</span></div>
         </div>
 
@@ -935,19 +977,24 @@
             <div class="card-head"><div><div class="card-title">${icon("user")}Perfil financeiro</div><div class="card-sub">Nome exibido no sistema e nos relatórios impressos</div></div></div>
             <div class="card-body">
               <div class="form-grid">
-                <div class="field full"><label>Nome do perfil</label><input class="input" id="org-input" value="${esc(meta.org)}" maxlength="60"></div>
+                <div class="field full"><label for="org-input">Nome do perfil</label><input class="input" id="org-input" value="${esc(meta.name || "")}" maxlength="60" autocomplete="name"></div>
+                ${accountEmail ? `<div class="field full"><label>E-mail da conta</label><input class="input" value="${esc(accountEmail)}" readonly></div>` : ""}
               </div>
               <div class="row mt-12" style="justify-content:flex-end"><button class="btn primary sm" id="save-org">${icon("save")}Salvar nome</button></div>
             </div>
           </section>
 
           <section class="card">
-            <div class="card-head"><div><div class="card-title">${icon("info")}Listas do sistema</div><div class="card-sub">Classificações automáticas dos lançamentos</div></div></div>
+            <div class="card-head"><div><div class="card-title">${icon("flower")}Aparência</div><div class="card-sub">O tema claro é o padrão; o escuro é opcional</div></div></div>
             <div class="card-body">
-              <div class="small muted">Tipos de lançamento e status são calculados automaticamente e não podem ser alterados.</div>
-              <div class="chip-list mt-8">
-                ${st().settings.types.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}
-                ${st().settings.statuses.map((s) => `<span class="chip">${esc(s)}</span>`).join("")}
+              <div class="segmented" id="theme-choice" aria-label="Tema do sistema">
+                <button type="button" data-theme-choice="light" class="${settings.theme !== "dark" ? "active" : ""}" aria-pressed="${settings.theme !== "dark"}">${icon("sun")}Claro</button>
+                <button type="button" data-theme-choice="dark" class="${settings.theme === "dark" ? "active" : ""}" aria-pressed="${settings.theme === "dark"}">${icon("moon")}Escuro</button>
+              </div>
+              <p class="small muted mt-12">A arte e as cores acompanham o tema escolhido. Sua preferência fica salva ${storageScope}.</p>
+              <div class="chip-list mt-12">
+                ${settings.types.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}
+                ${settings.statuses.map((s) => `<span class="chip">${esc(s)}</span>`).join("")}
               </div>
             </div>
           </section>
@@ -978,7 +1025,22 @@
         </div>
 
         <section class="card mt-16">
-          <div class="card-head"><div><div class="card-title">${icon("save")}Backup e restauração</div><div class="card-sub">Os dados vivem apenas neste navegador — exporte com frequência</div></div></div>
+          <div class="card-head"><div><div class="card-title">${icon("bell")}Alertas e notificações</div><div class="card-sub">Defina quando o sistema deve chamar sua atenção</div></div></div>
+          <div class="card-body">
+            <form id="notifications-form">
+              <div class="form-grid">
+                <div class="field"><label for="due-days">Avisar vencimentos com</label><div class="money-wrap"><input class="input" id="due-days" name="dueDays" type="number" min="1" max="60" step="1" value="${notifications.dueDays}" required><span>dias</span></div></div>
+                <div class="field"><label for="goal-inactivity">Avisar meta sem movimento há</label><div class="money-wrap"><input class="input" id="goal-inactivity" name="goalInactivityDays" type="number" min="1" max="365" step="1" value="${notifications.goalInactivityDays}" required><span>dias</span></div></div>
+                <div class="field"><label for="budget-warning">Aviso de orçamento</label><div class="money-wrap"><input class="input" id="budget-warning" name="budgetWarning" type="number" min="50" max="99" step="1" value="${notifications.budgetWarning}" required><span>%</span></div></div>
+                <div class="field"><label for="budget-critical">Orçamento crítico</label><div class="money-wrap"><input class="input" id="budget-critical" name="budgetCritical" type="number" min="100" max="200" step="1" value="${notifications.budgetCritical}" required><span>%</span></div></div>
+              </div>
+              <div class="row mt-12" style="justify-content:flex-end"><button class="btn primary sm" type="submit">${icon("save")}Salvar notificações</button></div>
+            </form>
+          </div>
+        </section>
+
+        <section class="card mt-16">
+          <div class="card-head"><div><div class="card-title">${icon("save")}Backup e restauração</div><div class="card-sub">${FM.store.remote ? "Seus dados estão salvos na conta — mantenha também um backup" : "Seus dados vivem neste navegador — exporte com frequência"}</div></div></div>
           <div class="card-body">
             <div class="grid grid-3">
               <div class="budget-card">
@@ -1016,22 +1078,133 @@
           </div>
         </section>
 
+        ${FM.store.remote ? `<section class="card mt-16">
+          <div class="card-head"><div><div class="card-title">${icon("shield")}Segurança da conta</div><div class="card-sub">Altere a senha sem repetir a confirmação</div></div></div>
+          <div class="card-body">
+            <form id="password-form">
+              <div class="form-grid">
+                <div class="field"><label for="current-password">Senha atual</label><input class="input" id="current-password" name="currentPassword" type="password" minlength="10" maxlength="128" autocomplete="current-password" required></div>
+                <div class="field"><label for="new-password">Nova senha</label><input class="input" id="new-password" name="newPassword" type="password" minlength="10" maxlength="128" autocomplete="new-password" required><span class="field-hint">Use de 10 a 128 caracteres, com letras e números.</span></div>
+              </div>
+              <div class="row mt-12" style="justify-content:flex-end"><button class="btn subtle sm" type="submit">${icon("save")}Salvar nova senha</button></div>
+            </form>
+          </div>
+        </section>` : ""}
+
         <section class="card mt-16" style="border-color:rgba(204,88,114,.3)">
-          <div class="card-head"><div><div class="card-title text-red">${icon("alert")}Zona de risco</div><div class="card-sub">Ações irreversíveis neste navegador</div></div></div>
+          <div class="card-head"><div><div class="card-title text-red">${icon("alert")}Zona de risco</div><div class="card-sub">Ações irreversíveis ${storageScope}</div></div></div>
           <div class="card-body">
             <div class="row between wrap">
               <p class="small muted" style="max-width:520px">Apagar todos os dados remove contas, lançamentos, baixas, orçamentos e conciliações. O sistema volta vazio. Exporte um backup antes.</p>
               <button class="btn sm danger" id="clear-all">${icon("trash")}Apagar todos os dados</button>
             </div>
+            ${FM.store.remote ? `<div class="row between wrap mt-16" style="padding-top:16px;border-top:1px solid var(--border)">
+              <p class="small muted" style="max-width:520px">Excluir a conta remove permanentemente o cadastro, os dados salvos e todas as sessões. Baixe um backup antes.</p>
+              <button class="btn sm danger" id="delete-account">${icon("trash")}Excluir minha conta</button>
+            </div>` : ""}
           </div>
         </section>
       </div>
     `;
 
-    mount.querySelector("#save-org").addEventListener("click", () => {
+    mount.querySelector("#save-org").addEventListener("click", async () => {
+      const button = mount.querySelector("#save-org");
       const val = mount.querySelector("#org-input").value;
-      FM.actions.updateOrg(val);
-      FM.ui.toast("Nome do perfil atualizado.");
+      button.disabled = true;
+      try {
+        await FM.actions.updateProfile(val);
+        FM.ui.toast("Nome do perfil atualizado.");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível salvar o nome do perfil.", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    mount.querySelectorAll("[data-theme-choice]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await FM.actions.setTheme(button.dataset.themeChoice);
+          FM.ui.toast(button.dataset.themeChoice === "dark" ? "Tema escuro ativado." : "Tema claro ativado.", "success");
+        } catch (error) {
+          FM.ui.toast(error.message || "Não foi possível salvar o tema.", "error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+
+    mount.querySelector("#notifications-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        await FM.actions.updateNotifications(Object.fromEntries(new FormData(event.currentTarget).entries()));
+        FM.ui.toast("Notificações salvas.", "success");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível salvar as notificações.", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    const passwordForm = mount.querySelector("#password-form");
+    if (passwordForm) passwordForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const data = Object.fromEntries(new FormData(form).entries());
+      button.disabled = true;
+      try {
+        await FM.actions.changePassword(data.currentPassword, data.newPassword);
+        form.reset();
+        FM.ui.toast("Senha alterada. As outras sessões foram encerradas.", "success");
+      } catch (error) {
+        if (error.code === "REAUTH_REQUIRED") {
+          await FM.api.logout().catch(() => {});
+          window.dispatchEvent(new CustomEvent("meular:unauthorized"));
+          return;
+        }
+        FM.ui.toast(error.message || "Não foi possível alterar a senha.", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    const deleteButton = mount.querySelector("#delete-account");
+    if (deleteButton) deleteButton.addEventListener("click", async () => {
+      const ok = await FM.ui.confirm({
+        title: "Excluir conta",
+        message: `A conta ${accountEmail} e todos os dados salvos serão excluídos permanentemente. Esta ação não pode ser desfeita.`,
+        confirmLabel: "Excluir conta",
+        danger: true,
+      });
+      if (!ok) return;
+      deleteButton.disabled = true;
+      try {
+        await FM.actions.deleteAccount();
+        ["meu_lar_financeiro.v3", "livis_finance.v2", "meu_lar_financeiro.ui.v3", "livis_finance.ui.v2"].forEach((key) => {
+          try { localStorage.removeItem(key); } catch (error) {}
+        });
+        FM.api.user = null;
+        FM.api.csrfToken = "";
+        FM.store.remote = false;
+        FM.store.allowLocalMigration = false;
+        FM.store.state = null;
+        FM.theme.apply("light");
+        FM.auth.show(FM.app.authenticated);
+        FM.ui.toast("Conta excluída permanentemente.", "info");
+      } catch (error) {
+        if (error.code === "REAUTH_REQUIRED") {
+          await FM.api.logout().catch(() => {});
+          window.dispatchEvent(new CustomEvent("meular:unauthorized"));
+          return;
+        }
+        FM.ui.toast(error.message || "Não foi possível excluir a conta.", "error");
+      } finally {
+        deleteButton.disabled = false;
+      }
     });
 
     ["methods", "periodicities"].forEach((kind) => {
@@ -1065,9 +1238,13 @@
       });
     });
 
-    mount.querySelector("#backup-export").addEventListener("click", () => {
-      FM.store.exportJSON();
-      FM.ui.toast("Backup JSON baixado.");
+    mount.querySelector("#backup-export").addEventListener("click", async () => {
+      try {
+        await FM.store.exportJSON();
+        FM.ui.toast("Backup JSON baixado.");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível baixar o backup.", "error");
+      }
     });
     const fileInput = mount.querySelector("#import-file");
     mount.querySelector("#backup-import").addEventListener("click", () => fileInput.click());
@@ -1075,12 +1252,19 @@
       const file = fileInput.files && fileInput.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
+        const ok = await FM.ui.confirm({
+          title: "Importar backup",
+          message: "Todos os dados atuais serão substituídos pelo conteúdo do arquivo. Exporte um backup antes de continuar.",
+          confirmLabel: "Importar",
+          danger: true,
+        });
+        if (!ok) return;
         try {
-          FM.store.importJSON(String(reader.result));
+          await FM.store.importJSON(String(reader.result));
           FM.ui.toast("Backup restaurado com sucesso.");
         } catch (err) {
-          FM.ui.toast(err.message, "error");
+          FM.ui.toast(err.message || "Não foi possível restaurar o backup.", "error");
         }
       };
       reader.onerror = () => FM.ui.toast("Não foi possível ler o arquivo.", "error");
@@ -1095,20 +1279,28 @@
         danger: true,
       });
       if (!ok) return;
-      FM.store.restoreSheet();
-      FM.ui.toast("Dados da planilha restaurados.", "info");
+      try {
+        await FM.store.restoreSheet();
+        FM.ui.toast("Dados da planilha restaurados.", "info");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível restaurar os dados.", "error");
+      }
     });
 
     mount.querySelector("#clear-all").addEventListener("click", async () => {
       const ok = await FM.ui.confirm({
         title: "Apagar todos os dados",
-        message: "Contas, lançamentos, baixas, orçamentos e conciliações serão removidos definitivamente deste navegador. Não é possível desfazer. Exporte um backup antes.",
+        message: `Contas, lançamentos, baixas, orçamentos e conciliações serão removidos definitivamente ${storageScope}. Não é possível desfazer. Exporte um backup antes.`,
         confirmLabel: "Apagar tudo",
         danger: true,
       });
       if (!ok) return;
-      FM.store.clearAll();
-      FM.ui.toast("Todos os dados foram apagados.", "info");
+      try {
+        await FM.store.clearAll();
+        FM.ui.toast("Todos os dados foram apagados.", "info");
+      } catch (error) {
+        FM.ui.toast(error.message || "Não foi possível apagar os dados.", "error");
+      }
     });
   };
 })();

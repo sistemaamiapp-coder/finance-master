@@ -1,5 +1,5 @@
 /* =========================================================
-   LIVIS FINANCE — componentes de interface
+   MEU LAR FINANCEIRO — componentes de interface
    ========================================================= */
 (function () {
   "use strict";
@@ -210,10 +210,20 @@
   function emptyState(iconName, title, text, actionHTML) {
     return `<div class="empty-state"><div class="empty-icon">${icon(iconName || "info")}</div><h3>${esc(title)}</h3><p>${esc(text)}</p>${actionHTML || ""}</div>`;
   }
-  function accountOptions(selected, includeInactive) {
-    const accs = state().accounts.filter((a) => includeInactive || a.active || a.id === selected);
-    if (!accs.length) return `<option value="">Cadastre uma conta primeiro</option>`;
+  function accountOptions(selected, includeInactive, filter) {
+    const accs = state().accounts.filter((a) => {
+      if (!includeInactive && !a.active && a.id !== selected) return false;
+      if (filter === "excludeCards" && a.type === "Cartão de crédito") return false;
+      if (filter === "cardsOnly" && a.type !== "Cartão de crédito") return false;
+      if (filter === "cashOnly" && a.type === "Cartão de crédito") return false;
+      return true;
+    });
+    if (!accs.length) return `<option value="">${filter === "cardsOnly" ? "Cadastre um cartão primeiro" : "Cadastre uma conta primeiro"}</option>`;
     return accs.map((a) => `<option value="${esc(a.id)}" ${a.id === selected ? "selected" : ""}>${esc(a.name)}${a.institution ? " — " + esc(a.institution) : ""}${a.active ? "" : " (inativa)"}</option>`).join("");
+  }
+  function donorOptions(selected) {
+    const donors = state().donors || [];
+    return `<option value="">Sem ofertante</option>` + donors.filter((donor) => donor.active || donor.id === selected).map((donor) => `<option value="${esc(donor.id)}" ${donor.id === selected ? "selected" : ""}>${esc(donor.name)}${donor.active ? "" : " (inativo)"}</option>`).join("");
   }
   function costCenterOptions(selected) {
     const list = state().costCenters;
@@ -247,6 +257,9 @@
   function openTxForm(tx, opts) {
     opts = opts || {};
     const isEdit = !!tx;
+    if (tx && FM.calc.accountById(tx.account)?.type === "Cartão de crédito" && FM.ui.openCardPurchaseForm) {
+      return FM.ui.openCardPurchaseForm(tx.cardPurchaseId || tx.id);
+    }
     const type = tx ? tx.type : opts.type || "despesa";
     const section = tx ? tx.section : opts.section || (type === "receita" ? "Entradas" : "Gastos do mês");
     const hasPayments = tx && (tx.payments || []).length > 0;
@@ -282,9 +295,13 @@
           <label>Categoria</label>
           <select class="select" name="category" data-cat-select>${categoryOptions(type, tx ? tx.category : "", tx ? tx.subcategory : "")}</select>
         </div>
+        <div class="field" data-donor-field ${type === "receita" ? "" : "hidden"}>
+          <label>Ofertante (opcional)</label>
+          <select class="select" name="donorId">${donorOptions(tx ? tx.donorId : "")}</select>
+        </div>
         <div class="field">
           <label>Conta financeira</label>
-          <select class="select" name="account">${accountOptions(tx ? tx.account : (opts.account || ""))}</select>
+          <select class="select" name="account">${accountOptions(tx ? tx.account : (opts.account || ""), false, "excludeCards")}</select>
         </div>
         <div class="field">
           <label>Origem</label>
@@ -304,6 +321,7 @@
           <label>Comprovante / observação</label>
           <input class="input" name="note" maxlength="180" placeholder="Nº do recibo, fornecedor, observações..." value="${tx ? esc(tx.note) : ""}">
         </div>
+        ${FM.attachments?.available() ? FM.attachments.inputField() : ""}
         ${!isEdit ? `<div class="form-section full">
           <label class="check"><input type="checkbox" name="settleNow"> Já registrar a baixa (dinheiro movimentado)</label>
           <div class="form-grid mt-8" data-settle-fields hidden>
@@ -330,6 +348,7 @@
         const hidden = form.querySelector('input[name="type"]');
         const settleCheck = form.querySelector('input[name="settleNow"]');
         const settleFields = form.querySelector("[data-settle-fields]");
+        const donorField = form.querySelector("[data-donor-field]");
         const dateInput = form.querySelector('input[name="date"]');
         const dueInput = form.querySelector('input[name="dueDate"]');
         if (hasPayments) seg.querySelectorAll("button").forEach((b) => (b.disabled = true));
@@ -342,6 +361,7 @@
             const prev = catSel.value.split("||");
             catSel.innerHTML = categoryOptions(t, prev[0], prev[1]);
             if (sectionSel) sectionSel.value = t === "receita" ? "Entradas" : sectionSel.value === "Entradas" ? "Gastos do mês" : sectionSel.value;
+            if (donorField) donorField.hidden = t !== "receita";
           });
         });
         if (dateInput && dueInput) {
@@ -360,7 +380,7 @@
           });
         }
       },
-      onSubmit(fd) {
+      async onSubmit(fd, form) {
         const typeVal = fd.get("type") === "receita" ? "receita" : "despesa";
         const catVal = String(fd.get("category") || "");
         const parts = catVal.split("||");
@@ -380,8 +400,14 @@
           note: fd.get("note"),
           settleNow: !!fd.get("settleNow"),
           settleDate: fd.get("settleDate"),
+          donorId: typeVal === "receita" ? fd.get("donorId") : "",
         };
-        const saved = FM.actions.saveTransaction(payload, isEdit ? tx.id : null);
+        const saved = await FM.actions.saveTransaction(payload, isEdit ? tx.id : null);
+        const files = [...(form.querySelector("[data-attachment-input]")?.files || [])];
+        if (files.length) {
+          try { await FM.attachments.upload("transaction", saved.id, files); }
+          catch (error) { toast("O lançamento foi salvo, mas o comprovante não foi enviado. Tente novamente pelos detalhes.", "error"); }
+        }
         toast(isEdit ? "Lançamento atualizado com sucesso." : "Lançamento registrado com sucesso.");
         return saved;
       },
@@ -396,6 +422,10 @@
     opts = opts || {};
     const tx = FM.calc.txById(txId);
     if (!tx) return toast("Lançamento não encontrado.", "error");
+    if (tx.section === "Cartão de crédito" || FM.calc.accountById(tx.account)?.type === "Cartão de crédito") {
+      toast("Compras de cartão são liquidadas pelo pagamento da fatura em Cartões e faturas.", "warn");
+      return FM.app.go(`cartoes?card=${encodeURIComponent(tx.account)}`);
+    }
     const remaining = FM.calc.remaining(tx);
     const isReceita = tx.type === "receita";
     const body = `
@@ -407,7 +437,7 @@
       <div class="form-grid">
         <div class="field"><label>Valor da baixa</label><div class="money-wrap"><span>R$</span><input class="input money" name="amount" inputmode="decimal" value="${String(remaining).replace(".", ",")}"></div></div>
         <div class="field"><label>Data</label><input type="date" class="input" name="date" value="${todayISO()}"></div>
-        <div class="field full"><label>Conta ${isReceita ? "de entrada" : "de saída"}</label><select class="select" name="account">${accountOptions(tx.account)}</select></div>
+        <div class="field full"><label>Conta ${isReceita ? "de entrada" : "de saída"}</label><select class="select" name="account">${accountOptions(tx.account, false, "excludeCards")}</select></div>
         <div class="field full"><label>Observação</label><input class="input" name="note" placeholder="Opcional"></div>
       </div>
     `;
@@ -454,6 +484,9 @@
     opts = opts || {};
     const tx = FM.calc.txById(txId);
     if (!tx) return toast("Lançamento não encontrado.", "error");
+    if (FM.calc.accountById(tx.account)?.type === "Cartão de crédito" && FM.ui.openCardPurchaseForm) {
+      return FM.ui.openCardPurchaseForm(tx.cardPurchaseId || tx.id);
+    }
     const status = FM.calc.effectiveStatus(tx);
     const paid = FM.calc.paidTotal(tx);
     const remaining = FM.calc.remaining(tx);
@@ -499,6 +532,7 @@
       ${isCancelled && tx.cancelReason ? `<div class="alert-strip danger" style="margin:16px 0 0"><div class="alert-icon">${icon("alert")}</div><div class="alert-text"><strong>Cancelado em ${fmtDate((tx.cancelledAt || "").slice(0, 10))}</strong><span>Motivo: ${esc(tx.cancelReason)}</span></div></div>` : ""}
       <div class="subsection-title">Baixas <span class="muted">${money(paid)} de ${money(tx.amount)}</span></div>
       <div>${payRows}</div>
+      ${FM.attachments?.available() ? `<div class="subsection-title">Comprovantes</div><div data-attachment-manager="transaction:${esc(tx.id)}"></div>` : ""}
       <div class="subsection-title">Trilha de auditoria</div>
       <div>${historyRows}</div>
     `;
@@ -517,6 +551,8 @@
       footer,
       size: "lg",
       onMount(ov, close) {
+        const attachmentManager = ov.querySelector("[data-attachment-manager]");
+        if (attachmentManager) FM.attachments.mount(attachmentManager, "transaction", tx.id);
         const payBtn = ov.querySelector("#tx-pay");
         if (payBtn) payBtn.addEventListener("click", () => openPaymentForm(tx.id, { onSaved: () => openTxDetail(tx.id) }));
         const editBtn = ov.querySelector("#tx-edit");
@@ -547,7 +583,7 @@
 
   FM.ui = {
     icon, toast, modal, modalForm, confirm, closeModal,
-    statusBadge, typeMark, emptyState, accountOptions, costCenterOptions, categoryOptions, methodOptions,
+    statusBadge, typeMark, emptyState, accountOptions, donorOptions, costCenterOptions, categoryOptions, methodOptions,
     openTxForm, openPaymentForm, openTxDetail, askCancelTx,
   };
 })();

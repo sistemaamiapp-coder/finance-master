@@ -1,12 +1,15 @@
 /* =========================================================
-   LIVIS FINANCE — store, cálculos e regras de negócio
+   MEU LAR FINANCEIRO — store, cálculos e regras de negócio
    ========================================================= */
 (function () {
   "use strict";
   const FM = (window.FM = window.FM || {});
-  const KEY = "livis_finance.v2";
-  const UI_KEY = "livis_finance.ui.v2";
-  const VERSION = 2;
+  const KEY = "meu_lar_financeiro.v3";
+  const LEGACY_KEY = "livis_finance.v2";
+  const UI_KEY = "meu_lar_financeiro.ui.v3";
+  const LEGACY_UI_KEY = "livis_finance.ui.v2";
+  const VERSION = 3;
+  const PRODUCT_NAME = "Meu Lar Financeiro";
 
   /* ---------------- utilities ---------------- */
   const pad = (n) => String(n).padStart(2, "0");
@@ -132,7 +135,14 @@
     }, 400);
   };
   const downloadCSV = (filename, headers, rows) => {
-    const cell = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const cell = (value) => {
+      const text = String(value == null ? "" : value);
+      const numeric = typeof value === "number"
+        ? Number.isFinite(value)
+        : /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(text);
+      const safe = !numeric && /^\s*[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
     const csv = "\ufeff" + [headers, ...rows].map((r) => r.map(cell).join(";")).join("\r\n");
     downloadFile(new Blob([csv], { type: "text/csv;charset=utf-8;" }), filename);
   };
@@ -149,8 +159,10 @@
     methods: ["Débito", "Crédito 1", "Crédito 2", "Crédito 3", "Crédito 4", "PIX", "Dinheiro", "Boleto", "Transferência"],
     periodicities: ["Única", "Semanal", "Mensal", "Anual"],
     types: ["Receita", "Despesa"],
-    statuses: ["Previsto", "Pago", "Recebido", "Parcial", "Atrasado", "Cancelado"],
+    statuses: ["Previsto", "Pago", "Recebido", "Parcial", "Atrasado", "Em fatura", "Cancelado"],
     sections: ["Contas fixas", "Gastos do mês", "Cartão de crédito", "Entradas", "Investimento"],
+    theme: "light",
+    notifications: { dueDays: 7, budgetWarning: 80, budgetCritical: 100, goalInactivityDays: 30 },
   };
 
   const CATEGORY_DEFS = [
@@ -345,15 +357,16 @@
 
       sheet.cards.forEach(([description, amount, method, detail]) => {
         const cat = categoryFor(description);
+        const credit = /^Crédito [1-4]$/.test(method);
         const notes = [
           detail,
           cat.inferred ? "Categoria sugerida pelo sistema; não informada na planilha." : "",
           "Data de referência: primeiro dia do mês; o dia não foi informado.",
         ];
         addTx({
-          date: refDate, dueDate: refDate, type: "despesa", section: "Cartão de crédito", description,
+          date: refDate, dueDate: refDate, type: "despesa", section: credit ? "Cartão de crédito" : "Gastos do mês", description,
           category: cat.name, subcategory: cat.name === "Não classificado" ? "Revisar" : "Geral",
-          account: accountFor(method), costCenter: "Cartões", amount, method, settle: refDate,
+          account: credit ? accountFor(method) : "ACC-001", costCenter: credit ? "Cartões" : "Casa", amount, method, settle: null,
           note: joinNotes(notes), sourceRef: `${sheet.label} · Cartão`,
         });
       });
@@ -390,7 +403,7 @@
 
     return {
       version: VERSION,
-      meta: { org: "Livis Finance", source: "Contas 2026 Envios Extra.xlsx", defaultMonth: "2026-11", createdAt: now, updatedAt: now },
+      meta: { org: PRODUCT_NAME, source: "Contas 2026 Envios Extra.xlsx", defaultMonth: "2026-11", createdAt: now, updatedAt: now },
       accounts, categories, costCenters, transactions, transfers: [],
       budgets: [], reconciliations: [], installmentGroups,
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
@@ -398,15 +411,11 @@
     };
   }
 
-  function emptyState() {
-    return {
-      version: VERSION,
-      meta: { org: "Livis Finance", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-      accounts: [], categories: [], costCenters: [], transactions: [], transfers: [],
-      budgets: [], reconciliations: [], installmentGroups: [],
-      settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
-      audit: [],
-    };
+  function makeRevisionConflict() {
+    const error = new Error("Os dados mudaram em outro dispositivo. Recarregue antes de salvar novamente.");
+    error.status = 409;
+    error.code = "REVISION_CONFLICT";
+    return error;
   }
 
   /* ---------------- store ---------------- */
@@ -414,50 +423,111 @@
     state: null,
     ui: { month: monthKeyOf(todayISO()), txFilters: {} },
     _initDone: false,
+    remote: false,
+    allowLocalMigration: true,
+    revision: 0,
+    dirty: false,
+    _saveQueue: Promise.resolve(),
+    _saveGeneration: 0,
 
-    init() {
+    async init() {
       let loaded = null;
+      for (const key of [KEY, LEGACY_KEY]) {
+        try {
+          loaded = JSON.parse(localStorage.getItem(key) || "null");
+        } catch (e) {
+          loaded = null;
+        }
+        if (loaded && Array.isArray(loaded.transactions)) break;
+      }
+      if (!loaded || !Array.isArray(loaded.transactions)) loaded = seedState();
       try {
-        loaded = JSON.parse(localStorage.getItem(KEY) || "null");
-      } catch (e) {
-        loaded = null;
+        const model = await import("../../backend/src/services/finance.js");
+        loaded = model.normalizeState(loaded);
+      } catch (error) {
+        console.error("Falha ao normalizar os dados locais", error);
+        loaded.version = VERSION;
+        loaded.meta = Object.assign({ org: PRODUCT_NAME }, loaded.meta || {});
+        loaded.meta.org = PRODUCT_NAME;
+        loaded.settings = Object.assign({}, DEFAULT_LISTS, loaded.settings || {});
+        loaded.settings.statuses = [...new Set([...DEFAULT_LISTS.statuses, ...(Array.isArray(loaded.settings.statuses) ? loaded.settings.statuses : [])])];
+        ["goals", "shoppingLists", "recurring", "reminders", "donors"].forEach((key) => { if (!Array.isArray(loaded[key])) loaded[key] = []; });
       }
-      if (!loaded || loaded.version !== VERSION || !Array.isArray(loaded.transactions)) {
-        loaded = seedState();
-      }
-      loaded.settings = Object.assign({}, DEFAULT_LISTS, loaded.settings || {});
-      loaded.meta = Object.assign({ org: "Livis Finance" }, loaded.meta || {});
-      delete loaded.meta.theme;
-      const legacyOrg = ["Luvis Finance", "Ministério AMI", "Minha organização"];
-      if (!loaded.meta.org || legacyOrg.includes(loaded.meta.org)) loaded.meta.org = "Livis Finance";
-      loaded.audit = loaded.audit || [];
-      loaded.installmentGroups = loaded.installmentGroups || [];
-      loaded.transactions.forEach((t) => {
-        if (!t.section) t.section = t.type === "receita" ? "Entradas" : t.groupId ? "Gastos do mês" : "Contas fixas";
-      });
-      loaded.installmentGroups.forEach((g) => {
-        if (!g.recordedCount) g.recordedCount = loaded.transactions.filter((t) => t.groupId === g.id).length;
-      });
       this.state = loaded;
+      if (FM.theme) FM.theme.apply(this.state.settings.theme, { persist: false });
       try {
-        const ui = JSON.parse(localStorage.getItem(UI_KEY) || "null");
+        const ui = JSON.parse(localStorage.getItem(UI_KEY) || localStorage.getItem(LEGACY_UI_KEY) || "null");
         if (ui && /^\d{4}-\d{2}$/.test(ui.month || "")) this.ui.month = ui.month;
         else if (/^\d{4}-\d{2}$/.test(loaded.meta.defaultMonth || "")) this.ui.month = loaded.meta.defaultMonth;
       } catch (e) {}
       this.save({ silent: true });
+      this._initDone = true;
+    },
+
+    hasLocalData() {
+      for (const key of [KEY, LEGACY_KEY]) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || "null");
+          if (data && (data.accounts?.length || data.transactions?.length)) return true;
+        } catch (e) {}
+      }
+      return false;
+    },
+
+    async loadRemote() {
+      const workspace = await FM.api.getState();
+      this.state = workspace.state;
+      this.revision = workspace.revision;
+      if (FM.theme) FM.theme.apply(this.state.settings.theme, { persist: false });
+      this.remote = true;
+      this.dirty = false;
+      return workspace;
     },
 
     save(opts) {
-      try {
-        this.state.meta.updatedAt = new Date().toISOString();
-        localStorage.setItem(KEY, JSON.stringify(this.state));
-      } catch (e) {
-        console.error("Falha ao salvar dados", e);
-        if (FM.ui && FM.ui.toast) FM.ui.toast("Não foi possível salvar os dados neste navegador.", "error");
+      this.state.meta.updatedAt = new Date().toISOString();
+      if (FM.theme) FM.theme.apply(this.state.settings.theme);
+      if (!this.remote) {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(this.state));
+        } catch (e) {
+          console.error("Falha ao salvar dados", e);
+          if (FM.ui && FM.ui.toast) FM.ui.toast("Não foi possível salvar os dados neste navegador.", "error");
+        }
+        if (!opts || !opts.silent) {
+          if (FM.app && FM.app.onDataChanged) FM.app.onDataChanged();
+        }
+        return Promise.resolve();
       }
+
+      const snapshot = JSON.parse(JSON.stringify(this.state));
+      const generation = this._saveGeneration;
+      this.dirty = true;
+      const task = this._saveQueue.then(async () => {
+        if (generation !== this._saveGeneration) throw makeRevisionConflict();
+        const workspace = await FM.api.saveState(snapshot, this.revision);
+        this.revision = workspace.revision;
+        this.dirty = false;
+        return workspace;
+      });
+      this._saveQueue = task.catch(async (error) => {
+        if (error.status === 409 || error.code === "REVISION_CONFLICT") {
+          this._saveGeneration += 1;
+          const workspace = await FM.api.getState();
+          this.state = workspace.state;
+          this.revision = workspace.revision;
+          if (FM.theme) FM.theme.apply(this.state.settings.theme, { persist: false });
+          this.dirty = false;
+          if (FM.app && FM.app.onDataChanged) FM.app.onDataChanged();
+        }
+        if (FM.ui && FM.ui.toast) {
+          FM.ui.toast(error.status === 409 ? "Os dados mudaram em outro dispositivo. A versão mais recente foi carregada." : "Não foi possível salvar no servidor. Suas alterações continuam nesta tela.", "error");
+        }
+      });
       if (!opts || !opts.silent) {
         if (FM.app && FM.app.onDataChanged) FM.app.onDataChanged();
       }
+      return task;
     },
 
     setMonth(key) {
@@ -481,42 +551,40 @@
     },
 
     exportJSON() {
+      if (this.remote) return FM.api.downloadBackup();
       const blob = new Blob([JSON.stringify(this.state, null, 2)], { type: "application/json" });
-      const name = `livis-finance-backup-${todayISO()}.json`;
+      const name = `meu-lar-financeiro-backup-${todayISO()}.json`;
       downloadFile(blob, name);
+      return Promise.resolve();
     },
-    importJSON(text) {
+    async importJSON(text) {
       let data;
       try { data = JSON.parse(text); } catch (e) { throw new Error("Arquivo inválido: não é um JSON válido."); }
+      data = data?.state || data;
       if (!data || !Array.isArray(data.transactions) || !Array.isArray(data.accounts)) {
         throw new Error("Backup inválido: estrutura não reconhecida.");
       }
-      data.version = VERSION;
-      data.settings = Object.assign({}, DEFAULT_LISTS, data.settings || {});
-      data.meta = Object.assign({ org: "Livis Finance" }, data.meta || {});
-      delete data.meta.theme;
-      const legacyOrg = ["Luvis Finance", "Ministério AMI", "Minha organização"];
-      if (!data.meta.org || legacyOrg.includes(data.meta.org)) data.meta.org = "Livis Finance";
-      data.audit = data.audit || [];
-      data.installmentGroups = data.installmentGroups || [];
-      data.transactions.forEach((t) => {
-        if (!t.section) t.section = t.type === "receita" ? "Entradas" : t.groupId ? "Gastos do mês" : "Contas fixas";
-      });
-      data.installmentGroups.forEach((g) => {
-        if (!g.recordedCount) g.recordedCount = data.transactions.filter((t) => t.groupId === g.id).length;
-      });
+      try {
+        const model = await import("../../backend/src/services/finance.js");
+        data = model.validateState(data);
+      } catch (error) {
+        if (error instanceof SyntaxError) throw error;
+        throw new Error(`Backup inválido: ${error.message}`);
+      }
       this.state = data;
       this.addAudit("Backup restaurado", "Sistema", "—", "Dados importados de arquivo JSON.");
-      this.save();
+      return this.save();
     },
-    restoreSheet() {
-      this.state = seedState();
-      this.save();
+    async restoreSheet() {
+      const model = await import("../../backend/src/services/finance.js");
+      this.state = model.normalizeState(seedState());
+      return this.save();
     },
-    clearAll() {
-      this.state = emptyState();
+    async clearAll() {
+      const model = await import("../../backend/src/services/finance.js");
+      this.state = model.createEmptyState({ name: this.state.meta?.name, email: this.state.meta?.email });
       this.addAudit("Dados apagados", "Sistema", "—", "Todos os cadastros e lançamentos foram removidos.");
-      this.save();
+      return this.save();
     },
   };
 
@@ -529,11 +597,13 @@
     paidTotal(t) { return round2(((t && t.payments) || []).reduce((s, p) => s + num(p.amount), 0)); },
     remaining(t) { return round2(Math.max(0, num(t && t.amount) - this.paidTotal(t))); },
     isCancelled(t) { return !!(t && (t.cancelled || t.status === "Cancelado")); },
-    isOpen(t) { return t && !this.isCancelled(t) && this.remaining(t) > 0.004; },
+    isCardPurchase(t) { return !!t && (t.section === "Cartão de crédito" || this.accountById(t.account)?.type === "Cartão de crédito"); },
+    isOpen(t) { return t && !this.isCardPurchase(t) && !this.isCancelled(t) && this.remaining(t) > 0.004; },
 
     effectiveStatus(t) {
       if (!t) return "—";
       if (this.isCancelled(t)) return "Cancelado";
+      if (this.isCardPurchase(t)) return "Em fatura";
       const rem = this.remaining(t);
       if (rem <= 0.004) return t.type === "receita" ? "Recebido" : "Pago";
       if (this.paidTotal(t) > 0.004) return "Parcial";
@@ -543,12 +613,62 @@
     statusTone(status) {
       return {
         "Pago": "ok", "Recebido": "ok", "Previsto": "primary", "Parcial": "warn",
-        "Atrasado": "danger", "Cancelado": "muted",
+        "Atrasado": "danger", "Em fatura": "purple", "Cancelado": "muted",
       }[status] || "muted";
     },
 
     isCashAccount(acc) {
       return !!acc && !["Cartão de crédito", "Cartão", "Investimento"].includes(acc.type);
+    },
+    invoiceMonthForDate(card, date) {
+      const parsed = new Date(`${date}T00:00:00Z`);
+      if (Number.isNaN(parsed.getTime())) return "";
+      const key = `${parsed.getUTCFullYear()}-${pad(parsed.getUTCMonth() + 1)}`;
+      return parsed.getUTCDate() <= (Number(card.closingDay) || 31) ? key : addMonthsKey(key, 1);
+    },
+    invoiceDueDate(card, key) {
+      const dueDay = Math.min(31, Number(card.dueDay) || 31);
+      const closingDay = Math.min(31, Number(card.closingDay) || 31);
+      const target = dueDay <= closingDay ? addMonthsKey(key, 1) : key;
+      return `${target}-${pad(Math.min(dueDay, Number(monthEnd(target).slice(8, 10))))}`;
+    },
+    cardInvoice(cardId, key) {
+      const card = this.accountById(cardId);
+      if (!card || card.type !== "Cartão de crédito") throw new Error("Cartão não encontrado.");
+      const purchases = store.state.transactions.filter((tx) => !this.isCancelled(tx) && tx.account === cardId && tx.section === "Cartão de crédito" && (tx.invoiceMonth || this.invoiceMonthForDate(card, tx.date)) === key);
+      const total = round2(purchases.reduce((sum, tx) => sum + num(tx.amount), 0));
+      const paid = round2(store.state.transfers.filter((transfer) => transfer.toAccount === cardId && transfer.invoiceMonth === key).reduce((sum, transfer) => sum + num(transfer.amount), 0));
+      const balance = round2(Math.max(0, total - paid));
+      return {
+        cardId, month: key,
+        closingDate: `${key}-${pad(Math.min(Number(card.closingDay) || 31, Number(monthEnd(key).slice(8, 10))))}`,
+        dueDate: this.invoiceDueDate(card, key), total, paid, balance,
+        status: paid + 0.004 >= total ? "Paga" : paid > 0 ? "Parcial" : key < monthKeyOf(todayISO()) ? "Vencida" : "Aberta",
+        purchaseCount: purchases.length,
+      };
+    },
+    cardSummary(cardId) {
+      const card = this.accountById(cardId);
+      const purchases = store.state.transactions.filter((tx) => !this.isCancelled(tx) && tx.account === cardId && tx.section === "Cartão de crédito").reduce((sum, tx) => sum + num(tx.amount), 0);
+      const paid = store.state.transfers.filter((transfer) => transfer.toAccount === cardId && transfer.invoiceMonth).reduce((sum, transfer) => sum + num(transfer.amount), 0);
+      const used = round2(Math.max(0, purchases - paid));
+      const total = num(card?.limit);
+      return { total, used, available: round2(Math.max(0, total - used)) };
+    },
+    cardMonths(cardId) {
+      const months = new Set([monthKeyOf(todayISO())]);
+      store.state.transactions.filter((tx) => tx.account === cardId && tx.invoiceMonth).forEach((tx) => months.add(tx.invoiceMonth));
+      store.state.transfers.filter((transfer) => transfer.toAccount === cardId && transfer.invoiceMonth).forEach((transfer) => months.add(transfer.invoiceMonth));
+      return [...months].sort().reverse();
+    },
+    cardPurchases(cardId) {
+      const groups = new Map();
+      store.state.transactions.filter((tx) => tx.account === cardId && tx.section === "Cartão de crédito").forEach((tx) => {
+        const id = tx.cardPurchaseId || tx.id;
+        if (!groups.has(id)) groups.set(id, []);
+        groups.get(id).push(tx);
+      });
+      return [...groups.values()].map((items) => items.sort((a, b) => a.installmentNumber - b.installmentNumber)).sort((a, b) => (b[0].purchaseDate || b[0].date).localeCompare(a[0].purchaseDate || a[0].date));
     },
     investmentBalance(untilISO) {
       return round2(store.state.accounts
@@ -562,6 +682,9 @@
       let bal = num(acc.openingBalance);
       store.state.transactions.forEach((t) => {
         if (this.isCancelled(t)) return;
+        if (acc.type === "Cartão de crédito" && t.account === accountId && t.section === "Cartão de crédito" && !(t.payments || []).length && t.date <= cutoff) {
+          bal -= num(t.amount);
+        }
         (t.payments || []).forEach((p) => {
           if ((p.account || t.account) !== accountId) return;
           if (p.date > cutoff) return;
@@ -692,15 +815,25 @@
     },
     categoryIncome(key) { return this.categorySpend(key, "receita"); },
 
+    notificationSettings() {
+      const value = store.state.settings.notifications || {};
+      const dueDays = Math.min(60, Math.max(1, Math.round(num(value.dueDays) || 7)));
+      const budgetWarning = Math.min(99, Math.max(50, Math.round(num(value.budgetWarning) || 80)));
+      const budgetCritical = Math.min(200, Math.max(budgetWarning + 1, Math.round(num(value.budgetCritical) || 100)));
+      const goalInactivityDays = Math.min(365, Math.max(1, Math.round(num(value.goalInactivityDays) || 30)));
+      return { dueDays, budgetWarning, budgetCritical, goalInactivityDays };
+    },
+
     openTotals(type) {
       let total = 0, count = 0, overdueTotal = 0, overdueCount = 0, soonTotal = 0, soonCount = 0;
       const today = todayISO();
+      const dueDays = this.notificationSettings().dueDays;
       store.state.transactions.forEach((t) => {
         if (t.type !== type || !this.isOpen(t)) return;
         const rem = this.remaining(t);
         total += rem; count += 1;
         if (t.dueDate && t.dueDate < today) { overdueTotal += rem; overdueCount += 1; }
-        else if (t.dueDate && dayDiff(t.dueDate) <= 7) { soonTotal += rem; soonCount += 1; }
+        else if (t.dueDate && dayDiff(t.dueDate) <= dueDays) { soonTotal += rem; soonCount += 1; }
       });
       return { total: round2(total), count, overdue: { total: round2(overdueTotal), count: overdueCount }, soon: { total: round2(soonTotal), count: soonCount } };
     },
@@ -708,6 +841,7 @@
     budgetRows(key) {
       const rows = [];
       const monthPayments = this.paymentsInMonth({ month: key, type: "despesa" });
+      const notifications = this.notificationSettings();
       store.state.budgets.filter((b) => b.month === key).forEach((b) => {
         let actual = 0;
         monthPayments.forEach(({ tx, payment }) => {
@@ -718,7 +852,12 @@
         actual = round2(actual);
         const planned = num(b.planned);
         const usage = planned > 0 ? actual / planned : 0;
-        rows.push({ budget: b, category: b.category, costCenter: b.costCenter, planned, actual, remaining: round2(planned - actual), usage, over: actual > planned + 0.004 });
+        rows.push({
+          budget: b, category: b.category, costCenter: b.costCenter, planned, actual,
+          remaining: round2(planned - actual), usage, over: actual > planned + 0.004,
+          warning: planned > 0 && usage >= notifications.budgetWarning / 100,
+          critical: planned > 0 && usage >= notifications.budgetCritical / 100,
+        });
       });
       return rows.sort((a, b) => b.usage - a.usage);
     },
@@ -732,7 +871,7 @@
     alerts() {
       const pay = this.openTotals("despesa");
       const rec = this.openTotals("receita");
-      const budgets = this.budgetRows(store.ui.month).filter((r) => r.usage >= 0.85);
+      const budgets = this.budgetRows(store.ui.month).filter((r) => r.warning);
       return { pay, rec, budgets };
     },
 
@@ -774,7 +913,7 @@
       } else if (pay.soon.count > 0) {
         out.push({
           tone: "warn", icon: "clock",
-          title: `${pay.soon.count} conta(s) vencem em até 7 dias`,
+          title: `${pay.soon.count} conta(s) vencem em até ${this.notificationSettings().dueDays} dias`,
           text: `${money(pay.soon.total)} a pagar nos próximos dias. Confirme o saldo da conta escolhida antes da baixa.`,
           link: { route: "a-pagar", label: "Planejar pagamentos" },
         });
@@ -782,14 +921,32 @@
 
       const budgetRows = this.budgetRows(key);
       const worst = budgetRows.filter((r) => r.planned > 0).sort((a, b) => b.usage - a.usage)[0];
-      if (worst && worst.usage >= 0.8) {
+      if (worst && worst.warning) {
         out.push({
-          tone: worst.over ? "danger" : "warn", icon: "target",
+          tone: worst.critical || worst.over ? "danger" : "warn", icon: "target",
           title: `Orçamento de ${worst.category} em ${pct(worst.usage)}`,
           text: worst.over
             ? `O realizado (${money(worst.actual)}) já superou o planejado (${money(worst.planned)}) em ${money(Math.abs(worst.remaining))}. Reveja a categoria ou ajuste o plano.`
             : `Já foram usados ${money(worst.actual)} de ${money(worst.planned)}. Restam ${money(worst.remaining)} até o fim do mês.`,
           link: { route: "orcamento", label: "Ajustar orçamento" },
+        });
+      }
+
+      const inactivityDays = this.notificationSettings().goalInactivityDays;
+      const inactiveGoal = store.state.goals
+        .filter((goal) => goal.status === "active")
+        .map((goal) => {
+          const lastActivity = (goal.movements || []).reduce((latest, movement) => movement.date > latest ? movement.date : latest, goal.startDate || "");
+          return { goal, lastActivity, inactiveFor: lastActivity ? dayDiff(lastActivity) : 0 };
+        })
+        .filter((item) => item.inactiveFor >= inactivityDays)
+        .sort((a, b) => b.inactiveFor - a.inactiveFor)[0];
+      if (inactiveGoal) {
+        out.push({
+          tone: "warn", icon: "clock",
+          title: `Meta ${inactiveGoal.goal.name} está sem movimentação`,
+          text: `Faz ${inactiveGoal.inactiveFor} dia(s) desde o último movimento. Revise o valor e a data prevista para manter o plano atualizado.`,
+          link: { route: "metas", label: "Revisar metas" },
         });
       }
 
@@ -878,9 +1035,531 @@
     if (type && String(c.type).toLowerCase() !== String(type).toLowerCase()) throw new Error("A categoria selecionada não pertence ao tipo do lançamento.");
     return c;
   }
+  function goalBalance(goal) {
+    const movements = (goal.movements || []).reduce((total, movement) => total + (movement.type === "retirada" ? -num(movement.amount) : num(movement.amount)), num(goal.initialAmount));
+    return round2(movements);
+  }
+  function requireCashAccount(id, label) {
+    const account = calc.accountById(id);
+    if (!account || !account.active || !calc.isCashAccount(account)) throw new Error(`Selecione uma ${label} válida e ativa.`);
+    return account;
+  }
+  function createGoalTransfer(goal, counterpartAccount, type, amount, date, note, id) {
+    const transfer = {
+      id,
+      date,
+      fromAccount: type === "deposito" ? counterpartAccount : goal.account,
+      toAccount: type === "deposito" ? goal.account : counterpartAccount,
+      amount,
+      fee: 0,
+      note: `Meta ${goal.name} · ${note}`,
+    };
+    store.state.transfers.unshift(transfer);
+    return transfer;
+  }
+  function expenseCategory(name) {
+    return store.state.categories.find((category) => category.type === "Despesa" && category.name === name) || null;
+  }
+  function requireExpenseCategory(name) {
+    const category = expenseCategory(name);
+    if (!category) throw new Error("Selecione uma categoria de despesa válida.");
+    return category;
+  }
+  function assertShoppingEditable(list) {
+    if (list.generatedTxIds?.length) throw new Error("Esta lista já gerou despesa e seus itens estão bloqueados para preservar o histórico.");
+  }
+  async function commitValidated(change, audit) {
+    const model = await import("../../backend/src/services/finance.js");
+    const candidate = JSON.parse(JSON.stringify(store.state));
+    const result = change(candidate);
+    if (audit) candidate.audit.unshift({ id: uid("AUD"), ts: new Date().toISOString(), action: audit.action, entity: audit.entity, ref: audit.ref, detail: audit.detail });
+    store.state = model.validateState(candidate);
+    await store.save();
+    return result;
+  }
 
   const actions = {
-    saveTransaction(data, id) {
+    saveGoal(data, id) {
+      const existing = id ? store.state.goals.find((goal) => goal.id === id) : null;
+      if (id && !existing) throw new Error("Meta não encontrada.");
+      const account = calc.accountById(existing ? existing.account : data.account);
+      if (!account || !account.active || account.type !== "Investimento") throw new Error("Selecione uma conta de investimento ativa.");
+      const name = String(data.name || "").trim();
+      if (!name) throw new Error("Informe o nome da meta.");
+      const target = round2(data.target);
+      if (!(target > 0)) throw new Error("Informe um valor desejado maior que zero.");
+      const startDate = existing ? existing.startDate : data.startDate;
+      const targetDate = data.targetDate || null;
+      if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error("Informe a data de início.");
+      if (targetDate && targetDate < startDate) throw new Error("A data prevista não pode ser anterior ao início.");
+      const status = ["active", "paused", "concluded", "cancelled"].includes(data.status) ? data.status : "active";
+
+      if (existing) {
+        if (data.account && data.account !== existing.account) throw new Error("A conta de investimento não pode mudar depois da criação.");
+        if (Math.abs(round2(data.initialAmount) - num(existing.initialAmount)) > 0.004) {
+          throw new Error("O valor inicial não pode ser alterado. Use um movimento para ajustar a reserva.");
+        }
+        if (status === "concluded" && goalBalance(existing) <= 0) throw new Error("Uma meta sem saldo não pode ser marcada como concluída.");
+        if (data.allowNegative !== true && goalBalance(existing) < 0) throw new Error("A meta está negativa. Mantenha a regra de saldo negativo ou ajuste a reserva primeiro.");
+        Object.assign(existing, { name, target, targetDate, description: String(data.description || "").trim(), allowNegative: data.allowNegative === true, status, updatedAt: new Date().toISOString() });
+        store.addAudit("Meta editada", "Meta", existing.id, name);
+        return store.save();
+      }
+
+      const initialAmount = round2(data.initialAmount);
+      if (initialAmount < 0) throw new Error("O valor inicial não pode ser negativo.");
+      if (status === "concluded" && initialAmount <= 0) throw new Error("Uma meta sem saldo não pode ser marcada como concluída.");
+      let initialAccount = null;
+      if (initialAmount > 0) {
+        initialAccount = requireCashAccount(data.initialAccount, "conta de origem");
+        if (calc.accountBalance(initialAccount.id, startDate) + 0.004 < initialAmount) throw new Error("A conta de origem não possui saldo suficiente para o valor inicial.");
+      }
+      const goal = {
+        id: store.nextId(store.state.goals, "META", 3),
+        name, target, initialAmount, startDate, targetDate,
+        description: String(data.description || "").trim(),
+        account: account.id, initialAccount: initialAccount?.id || null, status, allowNegative: data.allowNegative === true,
+        movements: [], initialTransferId: null,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+      store.state.goals.unshift(goal);
+      if (initialAmount > 0) {
+        const transfer = createGoalTransfer(goal, initialAccount.id, "deposito", initialAmount, startDate, "valor inicial", store.nextId(store.state.transfers, "TR", 3));
+        goal.initialTransferId = transfer.id;
+      }
+      store.addAudit("Meta criada", "Meta", goal.id, `${name} — objetivo ${money(target)}`);
+      return store.save();
+    },
+
+    addGoalMovement(goalId, data) {
+      const goal = store.state.goals.find((item) => item.id === goalId);
+      if (!goal) throw new Error("Meta não encontrada.");
+      if (goal.status !== "active") throw new Error("Retome a meta antes de registrar movimentos.");
+      const type = data.type === "retirada" ? "retirada" : "deposito";
+      const amount = round2(data.amount);
+      if (!(amount > 0)) throw new Error("Informe um valor maior que zero.");
+      if (!data.date || !/^\d{4}-\d{2}-\d{2}$/.test(data.date)) throw new Error("Informe a data do movimento.");
+      if (data.date < goal.startDate) throw new Error("O movimento não pode ser anterior ao início da meta.");
+      const counterpart = requireCashAccount(data.counterpartAccount, type === "deposito" ? "conta de origem" : "conta de destino");
+      const sourceId = type === "deposito" ? counterpart.id : goal.account;
+      if (calc.accountBalance(sourceId, data.date) + 0.004 < amount) throw new Error("A conta de origem não possui saldo suficiente.");
+      const nextBalance = round2(goalBalance(goal) + (type === "deposito" ? amount : -amount));
+      if (nextBalance < 0 && !goal.allowNegative) throw new Error("A retirada deixaria a meta negativa. Altere a regra da meta ou use um valor menor.");
+      if (nextBalance < 0 && data.confirmNegative !== true) throw new Error("Confirme a retirada que deixará o saldo da meta negativo.");
+      const transfer = createGoalTransfer(goal, counterpart.id, type, amount, data.date, data.note || (type === "deposito" ? "depósito" : "retirada"), store.nextId(store.state.transfers, "TR", 3));
+      const movement = {
+        id: store.nextId(goal.movements, "MOV", 3), type, amount, date: data.date,
+        counterpartAccount: counterpart.id, note: String(data.note || "").trim(), transferId: transfer.id,
+        createdAt: new Date().toISOString(),
+      };
+      goal.movements.unshift(movement);
+      goal.updatedAt = new Date().toISOString();
+      store.addAudit(type === "deposito" ? "Depósito na meta" : "Retirada da meta", "Meta", goal.id, `${goal.name} — ${money(amount)} em ${fmtDate(data.date)}`);
+      return store.save();
+    },
+
+    reverseGoalMovement(goalId, movementId) {
+      const goal = store.state.goals.find((item) => item.id === goalId);
+      const movement = goal?.movements?.find((item) => item.id === movementId);
+      if (!goal || !movement) throw new Error("Movimento não encontrado.");
+      if (movement.reversalOf) throw new Error("Um movimento de estorno não pode ser estornado novamente.");
+      if (goal.movements.some((item) => item.reversalOf === movement.id)) throw new Error("Este movimento já foi estornado.");
+      const type = movement.type === "deposito" ? "retirada" : "deposito";
+      const counterpart = requireCashAccount(movement.counterpartAccount, "conta da operação");
+      const sourceId = type === "deposito" ? counterpart.id : goal.account;
+      if (calc.accountBalance(sourceId, movement.date) + 0.004 < movement.amount) throw new Error("A conta de origem não possui saldo suficiente para o estorno.");
+      const nextBalance = round2(goalBalance(goal) + (type === "deposito" ? movement.amount : -movement.amount));
+      if (nextBalance < 0 && !goal.allowNegative) throw new Error("O estorno deixaria a meta negativa.");
+      const transfer = createGoalTransfer(goal, counterpart.id, type, movement.amount, movement.date, `estorno de ${movement.id}`, store.nextId(store.state.transfers, "TR", 3));
+      goal.movements.unshift({
+        id: store.nextId(goal.movements, "MOV", 3), type, amount: movement.amount, date: movement.date,
+        counterpartAccount: counterpart.id, note: `Estorno de ${movement.id}`, transferId: transfer.id,
+        reversalOf: movement.id, createdAt: new Date().toISOString(),
+      });
+      goal.updatedAt = new Date().toISOString();
+      store.addAudit("Movimento de meta estornado", "Meta", goal.id, `${movement.id} — ${money(movement.amount)}`);
+      return store.save();
+    },
+
+    setGoalStatus(id, status) {
+      const goal = store.state.goals.find((item) => item.id === id);
+      if (!goal) throw new Error("Meta não encontrada.");
+      if (!["active", "paused", "concluded", "cancelled"].includes(status)) throw new Error("Status inválido.");
+      if (status === "concluded" && goalBalance(goal) <= 0) throw new Error("Uma meta sem saldo não pode ser marcada como concluída.");
+      goal.status = status;
+      goal.updatedAt = new Date().toISOString();
+      store.addAudit("Status da meta alterado", "Meta", goal.id, `${goal.name} — ${status}`);
+      return store.save();
+    },
+
+    saveShoppingList(data, id) {
+      const existing = id ? store.state.shoppingLists.find((list) => list.id === id) : null;
+      if (id && !existing) throw new Error("Lista de compras não encontrada.");
+      const name = String(data.name || "").trim();
+      if (!name) throw new Error("Informe o nome da lista.");
+      const budget = round2(data.budget);
+      if (budget < 0) throw new Error("O orçamento não pode ser negativo.");
+      if (existing) {
+        Object.assign(existing, { name, budget, favorite: data.favorite === true, updatedAt: new Date().toISOString() });
+        store.addAudit("Lista de compras editada", "Compra", existing.id, name);
+        return store.save();
+      }
+      const list = {
+        id: store.nextId(store.state.shoppingLists, "CMP", 3), name, budget,
+        favorite: data.favorite === true, status: "active", items: [], generatedTxIds: [],
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+      store.state.shoppingLists.unshift(list);
+      store.addAudit("Lista de compras criada", "Compra", list.id, name);
+      return store.save();
+    },
+
+    toggleShoppingListFavorite(id) {
+      const list = store.state.shoppingLists.find((item) => item.id === id);
+      if (!list) throw new Error("Lista de compras não encontrada.");
+      list.favorite = !list.favorite;
+      list.updatedAt = new Date().toISOString();
+      store.addAudit(list.favorite ? "Lista marcada como favorita" : "Lista removida dos favoritos", "Compra", list.id, list.name);
+      return store.save();
+    },
+
+    duplicateShoppingList(id) {
+      const list = store.state.shoppingLists.find((item) => item.id === id);
+      if (!list) throw new Error("Lista de compras não encontrada.");
+      const itemIds = [];
+      const copy = {
+        ...JSON.parse(JSON.stringify(list)),
+        id: store.nextId(store.state.shoppingLists, "CMP", 3),
+        name: `${list.name} (cópia)`.slice(0, 80), status: "active", favorite: list.favorite,
+        generatedTxIds: [], completedAt: null,
+        items: list.items.map((item) => {
+          const id = store.nextId([...store.state.shoppingLists.flatMap((entry) => entry.items || []), ...itemIds], "ITEM", 4);
+          itemIds.push({ id });
+          return { ...item, id, purchased: false, effectivePrice: 0 };
+        }),
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+      store.state.shoppingLists.unshift(copy);
+      store.addAudit("Lista de compras duplicada", "Compra", copy.id, copy.name);
+      return store.save();
+    },
+
+    archiveShoppingList(id) {
+      const list = store.state.shoppingLists.find((item) => item.id === id);
+      if (!list) throw new Error("Lista de compras não encontrada.");
+      list.status = "archived";
+      list.updatedAt = new Date().toISOString();
+      store.addAudit("Lista de compras arquivada", "Compra", list.id, list.name);
+      return store.save();
+    },
+
+    saveShoppingItem(listId, data, itemId) {
+      const list = store.state.shoppingLists.find((item) => item.id === listId);
+      if (!list) throw new Error("Lista de compras não encontrada.");
+      assertShoppingEditable(list);
+      const existing = itemId ? list.items.find((item) => item.id === itemId) : null;
+      if (itemId && !existing) throw new Error("Item não encontrado nesta lista.");
+      const name = String(data.name || "").trim();
+      if (!name) throw new Error("Informe o nome do item.");
+      const quantity = num(data.quantity);
+      if (!(quantity > 0)) throw new Error("A quantidade deve ser maior que zero.");
+      const unit = String(data.unit || "un").trim();
+      if (!unit) throw new Error("Informe a unidade.");
+      requireExpenseCategory(data.category);
+      const estimatedPrice = round2(data.estimatedPrice);
+      const effectivePrice = round2(data.effectivePrice);
+      if (estimatedPrice < 0 || effectivePrice < 0) throw new Error("Os preços não podem ser negativos.");
+      const values = {
+        name, quantity, unit, category: data.category, estimatedPrice, effectivePrice,
+        purchased: data.purchased === true, note: String(data.note || "").trim(), updatedAt: new Date().toISOString(),
+      };
+      if (existing) Object.assign(existing, values);
+      else list.items.push({ id: store.nextId(store.state.shoppingLists.flatMap((entry) => entry.items || []), "ITEM", 4), ...values, createdAt: new Date().toISOString() });
+      list.updatedAt = new Date().toISOString();
+      store.addAudit(existing ? "Item de compra editado" : "Item de compra criado", "Compra", list.id, name);
+      return store.save();
+    },
+
+    toggleShoppingItem(listId, itemId) {
+      const list = store.state.shoppingLists.find((item) => item.id === listId);
+      const item = list?.items?.find((entry) => entry.id === itemId);
+      if (!list || !item) throw new Error("Item não encontrado.");
+      assertShoppingEditable(list);
+      item.purchased = !item.purchased;
+      if (item.purchased && !(num(item.effectivePrice) > 0) && num(item.estimatedPrice) > 0) item.effectivePrice = item.estimatedPrice;
+      item.updatedAt = new Date().toISOString();
+      list.updatedAt = new Date().toISOString();
+      store.addAudit(item.purchased ? "Item marcado como comprado" : "Item reaberto", "Compra", list.id, item.name);
+      return store.save();
+    },
+
+    deleteShoppingItem(listId, itemId) {
+      const list = store.state.shoppingLists.find((item) => item.id === listId);
+      const item = list?.items?.find((entry) => entry.id === itemId);
+      if (!list || !item) throw new Error("Item não encontrado.");
+      assertShoppingEditable(list);
+      list.items = list.items.filter((entry) => entry.id !== itemId);
+      list.updatedAt = new Date().toISOString();
+      store.addAudit("Item de compra excluído", "Compra", list.id, item.name);
+      return store.save();
+    },
+
+    generateShoppingExpense(listId, data) {
+      const list = store.state.shoppingLists.find((item) => item.id === listId);
+      if (!list) throw new Error("Lista de compras não encontrada.");
+      if (list.generatedTxIds?.length) throw new Error("Esta lista já gerou despesa. Não é possível duplicar a cobrança.");
+      if (list.status !== "active") throw new Error("Somente listas ativas podem gerar despesa.");
+      const incomplete = list.items.filter((item) => item.purchased && num(item.estimatedPrice) > 0 && !(num(item.effectivePrice) > 0));
+      if (incomplete.length) throw new Error(`Informe o preço efetivo de ${incomplete[0].name}.`);
+      const purchased = list.items.filter((item) => item.purchased && round2(num(item.quantity) * num(item.effectivePrice)) > 0);
+      if (!purchased.length) throw new Error("Marque ao menos um item comprado com valor para gerar a despesa.");
+      const account = requireCashAccount(data.account, "conta de pagamento");
+      const category = requireExpenseCategory(data.category);
+      const mode = data.mode === "per-item" ? "per-item" : "consolidated";
+      const date = data.date;
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Informe a data da compra.");
+      const method = store.state.settings.methods.includes(data.method) ? data.method : "PIX";
+      const created = [];
+      const makeTransaction = (description, amount, categoryName, itemIds) => {
+        const txCategory = expenseCategory(categoryName) || category;
+        const id = store.nextId([...store.state.transactions, ...created], "LAN", 4);
+        const tx = {
+          id, type: "despesa", description, amount: round2(amount),
+          category: txCategory.name, subcategory: txCategory.subcategory, section: "Gastos do mês",
+          account: account.id, costCenter: "Casa", date, dueDate: date, paidDate: date, status: "Pago", method,
+          note: String(data.note || "").trim(), document: "", payments: [{ id: `PG-${id}-1`, date, amount: round2(amount), account: account.id, note: "" }],
+          groupId: `SHOP:${list.id}`, sourceRef: `Lista ${list.id} · ${list.name}`, shoppingListId: list.id,
+          shoppingItemIds: itemIds, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), cancelled: false,
+        };
+        created.push(tx);
+        return tx;
+      };
+      if (mode === "consolidated") {
+        makeTransaction(`Compra — ${list.name}`, purchased.reduce((total, item) => total + num(item.quantity) * num(item.effectivePrice), 0), category.name, purchased.map((item) => item.id));
+      } else {
+        purchased.forEach((item) => makeTransaction(item.name, num(item.quantity) * num(item.effectivePrice), item.category, [item.id]));
+      }
+      store.state.transactions.unshift(...created);
+      list.generatedTxIds = created.map((tx) => tx.id);
+      list.status = "completed";
+      list.completedAt = new Date().toISOString();
+      list.updatedAt = list.completedAt;
+      store.addAudit("Despesa gerada de lista de compras", "Compra", list.id, `${created.length} lançamento(s) — ${money(created.reduce((total, tx) => total + tx.amount, 0))}`);
+      return store.save();
+    },
+
+    async saveRecurring(data, id) {
+      const existing = id ? store.state.recurring.find((rule) => rule.id === id) : null;
+      if (id && !existing) throw new Error("Recorrência não encontrada.");
+      const description = String(data.description || "").trim();
+      if (!description) throw new Error("Informe a descrição da recorrência.");
+      const type = data.type === "receita" ? "receita" : "despesa";
+      const amount = round2(data.amount);
+      if (!(amount > 0)) throw new Error("Informe um valor maior que zero.");
+      const category = findCategory(data.category, data.subcategory);
+      if (!category || category.type !== (type === "receita" ? "Receita" : "Despesa")) throw new Error("Selecione uma categoria compatível com o tipo.");
+      const account = calc.accountById(data.account);
+      if (!account || !account.active) throw new Error("Selecione uma conta ativa.");
+      if (account.type === "Cartão de crédito" && type !== "despesa") throw new Error("Receitas não podem ser registradas em cartões de crédito.");
+      const frequency = ["weekly", "biweekly", "monthly", "annual", "custom"].includes(data.frequency) ? data.frequency : "monthly";
+      const intervalDays = frequency === "custom" ? Math.floor(num(data.intervalDays)) : null;
+      if (frequency === "custom" && !(intervalDays > 0)) throw new Error("Informe o intervalo personalizado em dias.");
+      const startDate = data.startDate || existing?.startDate;
+      if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new Error("Informe a data inicial.");
+      const endDate = data.endDate || null;
+      if (endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < startDate)) throw new Error("A data final deve ser válida e posterior ao início.");
+      const status = ["active", "paused", "ended"].includes(data.status) ? data.status : existing?.status || "active";
+      if (existing?.status === "ended" && status !== "ended") throw new Error("Uma recorrência encerrada não pode ser reativada. Crie uma nova regra.");
+      const method = store.state.settings.methods.includes(data.method) ? data.method : "PIX";
+      const section = account.type === "Cartão de crédito" && type === "despesa" ? "Cartão de crédito" : DEFAULT_LISTS.sections.includes(data.section) ? data.section : type === "receita" ? "Entradas" : "Contas fixas";
+      const values = {
+        description, type, amount, category: category.name, subcategory: category.subcategory,
+        account: account.id, frequency, intervalDays, startDate, endDate, status,
+        active: status === "active", method, section, costCenter: String(data.costCenter || "").trim(),
+        reviewBeforeGenerate: data.reviewBeforeGenerate === true, note: String(data.note || "").trim(),
+        donorId: type === "receita" ? String(data.donorId || "") : "", updatedAt: new Date().toISOString(),
+      };
+      return commitValidated((candidate) => {
+        const rule = existing ? candidate.recurring.find((item) => item.id === existing.id) : null;
+        if (rule) Object.assign(rule, values);
+        else candidate.recurring.unshift({
+          id: store.nextId(candidate.recurring, "REC", 3), ...values,
+          occurrenceKeys: [], createdAt: new Date().toISOString(),
+        });
+      }, { action: existing ? "Recorrência editada" : "Recorrência criada", entity: "Recorrência", ref: id || description, detail: `${description} — ${money(amount)}` });
+    },
+
+    async previewRecurring(id, through) {
+      const rule = store.state.recurring.find((item) => item.id === id);
+      if (!rule) throw new Error("Recorrência não encontrada.");
+      const model = await import("../../backend/src/services/finance.js");
+      return model.missingOccurrences(rule, through || todayISO());
+    },
+
+    async generateRecurring(id, through, selectedKeys) {
+      const model = await import("../../backend/src/services/finance.js");
+      const result = model.generateRecurringOccurrences(store.state, id, through || todayISO(), selectedKeys);
+      if (!result.created.length) throw new Error("Nenhuma ocorrência pendente neste período.");
+      store.state = result.state;
+      await store.save();
+      return result.created;
+    },
+
+    async setRecurringStatus(id, status) {
+      const rule = store.state.recurring.find((item) => item.id === id);
+      if (!rule) throw new Error("Recorrência não encontrada.");
+      if (!["active", "paused", "ended"].includes(status)) throw new Error("Status inválido.");
+      if (rule.status === "ended" && status !== "ended") throw new Error("Uma recorrência encerrada não pode ser reativada.");
+      return commitValidated((candidate) => {
+        const item = candidate.recurring.find((entry) => entry.id === id);
+        item.status = status;
+        item.active = status === "active";
+        item.updatedAt = new Date().toISOString();
+      }, { action: status === "active" ? "Recorrência retomada" : status === "paused" ? "Recorrência pausada" : "Recorrência encerrada", entity: "Recorrência", ref: id, detail: rule.description });
+    },
+
+    async saveReminder(data, id) {
+      const existing = id ? store.state.reminders.find((reminder) => reminder.id === id) : null;
+      if (id && !existing) throw new Error("Lembrete não encontrado.");
+      const title = String(data.title || "").trim();
+      if (!title) throw new Error("Informe o título do lembrete.");
+      const type = data.type === "financial" ? "financial" : "note";
+      const priority = ["low", "normal", "high"].includes(data.priority) ? data.priority : "normal";
+      let remindAt = null;
+      if (data.remindAt) {
+        const date = new Date(data.remindAt);
+        if (Number.isNaN(date.getTime())) throw new Error("Informe uma data e hora válidas.");
+        remindAt = date.toISOString();
+      }
+      const linkType = ["", "account", "goal", "transaction"].includes(data.linkType) ? data.linkType : "";
+      const linkId = linkType ? String(data.linkId || "") : "";
+      if (linkType === "account" && !calc.accountById(linkId)) throw new Error("Conta vinculada não encontrada.");
+      if (linkType === "goal" && !store.state.goals.some((goal) => goal.id === linkId)) throw new Error("Meta vinculada não encontrada.");
+      if (linkType === "transaction" && !calc.txById(linkId)) throw new Error("Movimentação vinculada não encontrada.");
+      const completed = data.completed === true;
+      const now = new Date().toISOString();
+      const values = {
+        title, type, priority, remindAt, linkType, linkId, note: String(data.note || "").trim(), completed,
+        completedAt: completed ? existing?.completedAt || now : null, updatedAt: now,
+      };
+      return commitValidated((candidate) => {
+        const reminder = existing ? candidate.reminders.find((item) => item.id === existing.id) : null;
+        if (reminder) Object.assign(reminder, values);
+        else candidate.reminders.unshift({ id: store.nextId(candidate.reminders, "LEM", 3), ...values, createdAt: now });
+      }, { action: existing ? "Lembrete editado" : "Lembrete criado", entity: "Lembrete", ref: id || title, detail: title });
+    },
+
+    async toggleReminder(id) {
+      const reminder = store.state.reminders.find((item) => item.id === id);
+      if (!reminder) throw new Error("Lembrete não encontrado.");
+      const completed = !reminder.completed;
+      return commitValidated((candidate) => {
+        const item = candidate.reminders.find((entry) => entry.id === id);
+        item.completed = completed;
+        item.completedAt = completed ? new Date().toISOString() : null;
+        item.updatedAt = new Date().toISOString();
+      }, { action: completed ? "Lembrete concluído" : "Lembrete reaberto", entity: "Lembrete", ref: id, detail: reminder.title });
+    },
+
+    async deleteReminder(id) {
+      const reminder = store.state.reminders.find((item) => item.id === id);
+      if (!reminder) throw new Error("Lembrete não encontrado.");
+      return commitValidated((candidate) => {
+        candidate.reminders = candidate.reminders.filter((item) => item.id !== id);
+      }, { action: "Lembrete excluído", entity: "Lembrete", ref: id, detail: reminder.title });
+    },
+
+    async saveCardPurchase(data, purchaseId) {
+      const model = await import("../../backend/src/services/finance.js");
+      const result = model.saveCardPurchase(store.state, data, purchaseId || null);
+      store.state = result.state;
+      store.addAudit(purchaseId ? "Compra de cartão editada" : "Compra de cartão criada", "Compra", result.purchaseId, `${data.description} — ${money(data.total ?? data.amount)}`);
+      await store.save();
+      return result;
+    },
+
+    async cancelCardPurchase(purchaseId, reason) {
+      const model = await import("../../backend/src/services/finance.js");
+      const result = model.cancelCardPurchase(store.state, purchaseId, reason);
+      store.state = result.state;
+      store.addAudit("Compra de cartão cancelada", "Compra", purchaseId, reason);
+      await store.save();
+      return result;
+    },
+
+    async listInvoices(cardId) {
+      const model = await import("../../backend/src/services/finance.js");
+      return calc.cardMonths(cardId).map((key) => {
+        const invoice = model.cardInvoice(store.state, cardId, key);
+        return {
+          ...invoice,
+          purchases: store.state.transactions.filter((tx) => !calc.isCancelled(tx) && tx.account === cardId && tx.invoiceMonth === key),
+          payments: store.state.transfers.filter((transfer) => transfer.toAccount === cardId && transfer.invoiceMonth === key),
+        };
+      });
+    },
+
+    async payInvoice(cardId, invoiceMonth, data) {
+      const model = await import("../../backend/src/services/finance.js");
+      const result = model.payCardInvoice(store.state, cardId, invoiceMonth, data);
+      store.state = result.state;
+      store.addAudit("Fatura paga", "Fatura", `${cardId}-${invoiceMonth}`, `${money(result.transfer.amount)} — ${calc.accountName(result.transfer.fromAccount)}`);
+      await store.save();
+      return result.transfer;
+    },
+
+    async reverseInvoicePayment(transferId) {
+      const model = await import("../../backend/src/services/finance.js");
+      const result = model.reverseInvoicePayment(store.state, transferId);
+      store.state = result.state;
+      store.addAudit("Pagamento de fatura estornado", "Fatura", transferId, money(result.transfer.amount));
+      await store.save();
+      return result.transfer;
+    },
+
+    async getAnnualSummary(year) {
+      const model = await import("../../backend/src/services/finance.js");
+      return model.annualSummary(store.state, year);
+    },
+
+    async saveDonor(data, id) {
+      const existing = id ? store.state.donors.find((donor) => donor.id === id) : null;
+      if (id && !existing) throw new Error("Ofertante não encontrado.");
+      const name = String(data.name || "").trim();
+      if (!name) throw new Error("Informe o nome do ofertante.");
+      if (store.state.donors.some((donor) => donor.id !== id && donor.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
+        throw new Error("Já existe um ofertante com este nome.");
+      }
+      const values = { name, contact: String(data.contact || "").trim(), note: String(data.note || "").trim(), active: data.active !== false, updatedAt: new Date().toISOString() };
+      return commitValidated((candidate) => {
+        const donor = existing ? candidate.donors.find((item) => item.id === existing.id) : null;
+        if (donor) Object.assign(donor, values);
+        else candidate.donors.unshift({ id: store.nextId(candidate.donors, "DOA", 3), ...values, createdAt: new Date().toISOString() });
+      }, { action: existing ? "Ofertante editado" : "Ofertante criado", entity: "Ofertante", ref: id || name, detail: name });
+    },
+
+    async toggleDonor(id) {
+      const donor = store.state.donors.find((item) => item.id === id);
+      if (!donor) throw new Error("Ofertante não encontrado.");
+      return commitValidated((candidate) => {
+        const item = candidate.donors.find((entry) => entry.id === id);
+        item.active = !item.active;
+        item.updatedAt = new Date().toISOString();
+      }, { action: donor.active ? "Ofertante desativado" : "Ofertante reativado", entity: "Ofertante", ref: id, detail: donor.name });
+    },
+
+    async deleteDonor(id) {
+      const donor = store.state.donors.find((item) => item.id === id);
+      if (!donor) throw new Error("Ofertante não encontrado.");
+      if (store.state.transactions.some((tx) => tx.donorId === id) || store.state.recurring.some((rule) => rule.donorId === id)) {
+        throw new Error("Este ofertante possui receitas vinculadas. Desative o cadastro para preservar o histórico.");
+      }
+      return commitValidated((candidate) => {
+        candidate.donors = candidate.donors.filter((item) => item.id !== id);
+      }, { action: "Ofertante excluído", entity: "Ofertante", ref: id, detail: donor.name });
+    },
+
+    async saveTransaction(data, id) {
       const type = data.type === "receita" ? "receita" : "despesa";
       const section = DEFAULT_LISTS.sections.includes(data.section) ? data.section : type === "receita" ? "Entradas" : "Gastos do mês";
       if (!data.description || !String(data.description).trim()) throw new Error("Informe uma descrição.");
@@ -890,6 +1569,9 @@
       if (!data.account || !calc.accountById(data.account)) throw new Error("Selecione uma conta válida.");
       requireCategory(data.category, data.subcategory, type);
       const existing = id ? calc.txById(id) : null;
+      if (calc.accountById(data.account)?.type === "Cartão de crédito" || existing?.account && calc.accountById(existing.account)?.type === "Cartão de crédito") {
+        throw new Error("Use a tela Cartões e faturas para registrar ou editar compras no cartão.");
+      }
 
       if (existing) {
         if (calc.isCancelled(existing)) throw new Error("Lançamento cancelado não pode ser editado.");
@@ -912,6 +1594,7 @@
           method: data.method || "PIX",
           note: data.note || "",
           document: data.document || "",
+          donorId: type === "receita" ? String(data.donorId || "") : "",
           updatedAt: new Date().toISOString(),
         });
         if (existing.groupId) {
@@ -919,7 +1602,7 @@
           if (g) { g.category = data.category; g.subcategory = data.subcategory; g.section = section; g.account = data.account; g.costCenter = data.costCenter || ""; }
         }
         store.addAudit("Lançamento editado", "Lançamento", existing.id, `${existing.description} — ${money(existing.amount)}`);
-        store.save();
+        await store.save();
         return existing;
       }
 
@@ -945,6 +1628,7 @@
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         cancelled: false,
+        donorId: type === "receita" ? String(data.donorId || "") : "",
       };
       if (data.settleNow) {
         const pdate = data.settleDate || data.dueDate || data.date;
@@ -954,13 +1638,14 @@
       }
       store.state.transactions.unshift(tx);
       store.addAudit("Lançamento criado", "Lançamento", tx.id, `${tx.description} — ${money(tx.amount)}`);
-      store.save();
+      await store.save();
       return tx;
     },
 
     registerPayment(id, data) {
       const tx = calc.txById(id);
       if (!tx) throw new Error("Lançamento não encontrado.");
+      if (calc.accountById(tx.account)?.type === "Cartão de crédito") throw new Error("Liquide compras de cartão pelo pagamento da fatura, não por baixa direta.");
       if (calc.isCancelled(tx)) throw new Error("Lançamento cancelado.");
       const amount = round2(data.amount);
       const remaining = calc.remaining(tx);
@@ -988,6 +1673,7 @@
     reversePayment(id, paymentId) {
       const tx = calc.txById(id);
       if (!tx) throw new Error("Lançamento não encontrado.");
+      if (calc.accountById(tx.account)?.type === "Cartão de crédito") throw new Error("Pagamentos de cartão são estornados na tela de faturas.");
       const idx = (tx.payments || []).findIndex((p) => p.id === paymentId);
       if (idx < 0) throw new Error("Baixa não encontrada.");
       const p = tx.payments[idx];
@@ -1002,6 +1688,7 @@
     cancelTransaction(id, reason) {
       const tx = calc.txById(id);
       if (!tx) throw new Error("Lançamento não encontrado.");
+      if (calc.accountById(tx.account)?.type === "Cartão de crédito") throw new Error("Use a tela Cartões e faturas para cancelar a compra completa.");
       if (!reason || !String(reason).trim()) throw new Error("Informe o motivo do cancelamento.");
       tx.cancelled = true;
       tx.status = "Cancelado";
@@ -1017,6 +1704,9 @@
       if (!data.fromAccount || !data.toAccount) throw new Error("Informe a conta de origem e o destino.");
       if (data.fromAccount === data.toAccount) throw new Error("Origem e destino devem ser diferentes.");
       if (!calc.accountById(data.fromAccount) || !calc.accountById(data.toAccount)) throw new Error("Conta inválida.");
+      if (calc.accountById(data.fromAccount)?.type === "Cartão de crédito" || calc.accountById(data.toAccount)?.type === "Cartão de crédito") {
+        throw new Error("Para liquidar uma fatura, use o pagamento por mês na tela Cartões e faturas.");
+      }
       const amount = round2(data.amount);
       if (!(amount > 0)) throw new Error("Informe um valor maior que zero.");
       if (!data.date) throw new Error("Informe a data da transferência.");
@@ -1069,32 +1759,40 @@
       const idx = store.state.transfers.findIndex((t) => t.id === id);
       if (idx < 0) throw new Error("Transferência não encontrada.");
       const tr = store.state.transfers[idx];
+      if (tr.invoiceMonth) {
+        throw new Error("Pagamentos de fatura devem ser estornados na tela Cartões e faturas para preservar o vínculo com a fatura.");
+      }
+      if (store.state.goals.some((goal) => goal.initialTransferId === id || goal.movements?.some((movement) => movement.transferId === id))) {
+        throw new Error("Esta transferência está vinculada a uma meta. Estorne o movimento da meta para preservar o histórico.");
+      }
       store.state.transfers.splice(idx, 1);
       store.state.transactions = store.state.transactions.filter((t) => t.groupId !== `TRF:${tr.id}`);
       store.addAudit("Transferência excluída", "Transferência", id, `${money(tr.amount)} — registro removido`);
       store.save();
     },
 
-    saveAccount(data, id) {
+    async saveAccount(data, id) {
       if (!data.name || !String(data.name).trim()) throw new Error("Informe o nome da conta.");
-      if (id) {
-        const acc = store.state.accounts.find((a) => a.id === id);
-        if (!acc) throw new Error("Conta não encontrada.");
-        Object.assign(acc, {
-          name: String(data.name).trim(), institution: data.institution || "", type: data.type || "Conta corrente",
-          openingBalance: round2(data.openingBalance), active: data.active !== false,
-        });
-        store.addAudit("Conta editada", "Conta", acc.id, `${acc.name}`);
-      } else {
-        const acc = {
-          id: store.nextId(store.state.accounts, "ACC", 3),
-          name: String(data.name).trim(), institution: data.institution || "",
-          type: data.type || "Conta corrente", openingBalance: round2(data.openingBalance), active: true,
-        };
-        store.state.accounts.push(acc);
-        store.addAudit("Conta criada", "Conta", acc.id, `${acc.name}`);
-      }
-      store.save();
+      const values = {
+        name: String(data.name).trim(), institution: String(data.institution || "").trim(),
+        type: data.type || "Conta corrente", openingBalance: round2(data.openingBalance), active: data.active !== false,
+      };
+      if (values.type === "Cartão de crédito") Object.assign(values, {
+        closingDay: Math.floor(num(data.closingDay) || 31), dueDay: Math.floor(num(data.dueDay) || 31),
+        limit: round2(data.limit), brand: String(data.brand || "").trim(),
+        color: /^#[0-9a-f]{6}$/i.test(data.color || "") ? data.color : "#7c6a9c",
+      });
+      return commitValidated((candidate) => {
+        const account = id ? candidate.accounts.find((item) => item.id === id) : null;
+        if (id && !account) throw new Error("Conta não encontrada.");
+        if (account) {
+          Object.assign(account, values);
+          return account;
+        }
+        const created = { id: store.nextId(candidate.accounts, "ACC", 3), ...values };
+        candidate.accounts.push(created);
+        return created;
+      }, { action: id ? "Conta editada" : "Conta criada", entity: "Conta", ref: id || values.name, detail: values.name });
     },
     toggleAccount(id) {
       const acc = store.state.accounts.find((a) => a.id === id);
@@ -1270,6 +1968,7 @@
       const section = DEFAULT_LISTS.sections.includes(data.section) ? data.section : type === "receita" ? "Entradas" : "Gastos do mês";
       requireCategory(data.category, data.subcategory, type);
       if (!data.account || !calc.accountById(data.account)) throw new Error("Selecione a conta.");
+      if (calc.accountById(data.account).type === "Cartão de crédito") throw new Error("Parcelamentos no cartão são registrados como compras na tela Cartões e faturas.");
       const groupId = store.nextId(store.state.installmentGroups, "PRC", 4);
       const base = Math.floor((total / count) * 100) / 100;
       let accumulated = 0;
@@ -1316,10 +2015,47 @@
       return txs.length;
     },
 
-    updateOrg(name) {
-      store.state.meta.org = String(name || "").trim() || "Livis Finance";
-      store.addAudit("Perfil atualizado", "Sistema", "—", store.state.meta.org);
-      store.save();
+    async updateProfile(name) {
+      const profileName = String(name || "").trim().slice(0, 60);
+      if (!profileName) throw new Error("Informe o nome do perfil.");
+      if (store.remote) {
+        const result = await FM.api.updateProfile(profileName);
+        FM.api.user = result.user;
+      }
+      store.state.meta.name = profileName;
+      store.state.meta.email = FM.api.user?.email || store.state.meta.email || "";
+      store.addAudit("Perfil atualizado", "Sistema", "—", profileName);
+      return store.save();
+    },
+    setTheme(theme) {
+      if (!["light", "dark"].includes(theme)) throw new Error("Tema inválido.");
+      store.state.settings.theme = theme;
+      if (FM.theme) FM.theme.apply(theme);
+      store.addAudit("Tema atualizado", "Sistema", "—", theme === "dark" ? "Escuro" : "Claro");
+      return store.save();
+    },
+    updateNotifications(input) {
+      const current = calc.notificationSettings();
+      const value = { ...current, ...(input || {}) };
+      const dueDays = Number(value.dueDays);
+      const budgetWarning = Number(value.budgetWarning);
+      const budgetCritical = Number(value.budgetCritical);
+      const goalInactivityDays = Number(value.goalInactivityDays);
+      if (!Number.isInteger(dueDays) || dueDays < 1 || dueDays > 60) throw new Error("O aviso de vencimento deve ser de 1 a 60 dias.");
+      if (!Number.isInteger(budgetWarning) || budgetWarning < 50 || budgetWarning > 99) throw new Error("O aviso de orçamento deve ser de 50% a 99%.");
+      if (!Number.isInteger(budgetCritical) || budgetCritical < 100 || budgetCritical > 200 || budgetCritical <= budgetWarning) throw new Error("O limite crítico deve ser de 100% a 200% e maior que o aviso.");
+      if (!Number.isInteger(goalInactivityDays) || goalInactivityDays < 1 || goalInactivityDays > 365) throw new Error("A inatividade de metas deve ser de 1 a 365 dias.");
+      store.state.settings.notifications = { dueDays, budgetWarning, budgetCritical, goalInactivityDays };
+      store.addAudit("Notificações atualizadas", "Sistema", "—", `${dueDays} dias · orçamento ${budgetWarning}%/${budgetCritical}% · metas ${goalInactivityDays} dias`);
+      return store.save();
+    },
+    async changePassword(currentPassword, newPassword) {
+      if (!store.remote) throw new Error("A troca de senha está disponível somente para contas cadastradas.");
+      await FM.api.changePassword(currentPassword, newPassword);
+    },
+    async deleteAccount() {
+      if (!store.remote) throw new Error("A exclusão de conta está disponível somente para contas cadastradas.");
+      await FM.api.deleteAccount();
     },
     updateLists(kind, list) {
       if (!Array.isArray(list)) return;
