@@ -298,7 +298,7 @@
 
     return {
       version: VERSION,
-      meta: { org: "Luvis Finance", theme: "dark", createdAt: now, updatedAt: now },
+      meta: { org: "Luvis Finance", createdAt: now, updatedAt: now },
       accounts, categories, costCenters, transactions, transfers,
       budgets, reconciliations, installmentGroups,
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
@@ -306,10 +306,10 @@
     };
   }
 
-  function emptyState(theme) {
+  function emptyState() {
     return {
       version: VERSION,
-      meta: { org: "Luvis Finance", theme: theme || "dark", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      meta: { org: "Luvis Finance", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
       accounts: [], categories: [], costCenters: [], transactions: [], transfers: [],
       budgets: [], reconciliations: [], installmentGroups: [],
       settings: JSON.parse(JSON.stringify(DEFAULT_LISTS)),
@@ -335,7 +335,8 @@
       }
       // normalização defensiva
       loaded.settings = Object.assign({}, DEFAULT_LISTS, loaded.settings || {});
-      loaded.meta = Object.assign({ org: "Luvis Finance", theme: "dark" }, loaded.meta || {});
+      loaded.meta = Object.assign({ org: "Luvis Finance" }, loaded.meta || {});
+      delete loaded.meta.theme;
       const legacyOrg = ["Ministério AMI", "Minha organização"];
       if (!loaded.meta.org || legacyOrg.includes(loaded.meta.org)) loaded.meta.org = "Luvis Finance";
       loaded.audit = loaded.audit || [];
@@ -345,7 +346,6 @@
         const ui = JSON.parse(localStorage.getItem(UI_KEY) || "null");
         if (ui && /^\d{4}-\d{2}$/.test(ui.month || "")) this.ui.month = ui.month;
       } catch (e) {}
-      this.applyTheme();
       this.save({ silent: true });
     },
 
@@ -366,20 +366,6 @@
       if (!/^\d{4}-\d{2}$/.test(key || "")) return;
       this.ui.month = key;
       try { localStorage.setItem(UI_KEY, JSON.stringify(this.ui)); } catch (e) {}
-    },
-
-    theme() { return (this.state && this.state.meta.theme) || "dark"; },
-    applyTheme() {
-      const t = this.theme();
-      document.documentElement.setAttribute("data-theme", t);
-    },
-    setTheme(t) {
-      this.state.meta.theme = t === "light" ? "light" : "dark";
-      this.applyTheme();
-      this.save();
-    },
-    toggleTheme() {
-      this.setTheme(this.theme() === "dark" ? "light" : "dark");
     },
 
     addAudit(action, entity, ref, detail) {
@@ -409,24 +395,20 @@
       }
       data.version = VERSION;
       data.settings = Object.assign({}, DEFAULT_LISTS, data.settings || {});
-      data.meta = Object.assign({ org: "Luvis Finance", theme: this.theme() }, data.meta || {});
+      data.meta = Object.assign({ org: "Luvis Finance" }, data.meta || {});
+      delete data.meta.theme;
       data.audit = data.audit || [];
       data.installmentGroups = data.installmentGroups || [];
       this.state = data;
-      this.applyTheme();
       this.addAudit("Backup restaurado", "Sistema", "—", "Dados importados de arquivo JSON.");
       this.save();
     },
     restoreDemo() {
-      const theme = this.theme();
       this.state = seedState();
-      this.state.meta.theme = theme;
-      this.applyTheme();
       this.save();
     },
     clearAll() {
-      const theme = this.theme();
-      this.state = emptyState(theme);
+      this.state = emptyState();
       this.addAudit("Dados apagados", "Sistema", "—", "Todos os cadastros e lançamentos foram removidos.");
       this.save();
     },

@@ -417,11 +417,11 @@
               ${centers.length ? FM.charts.bars({
                 labels: chartLabels,
                 series: [
-                  { name: "Referência mensal", values: chartPlanned, color: "#7c8cff" },
-                  { name: "Gasto realizado", values: chartActual, color: "#ff6b81" },
+                  { name: "Referência mensal", values: chartPlanned, color: "#d96faa" },
+                  { name: "Gasto realizado", values: chartActual, color: "#e27c94" },
                 ],
                 height: 250,
-              }) + FM.charts.legend([{ name: "Referência mensal", color: "#7c8cff" }, { name: "Despesas pagas", color: "#ff6b81" }]) : FM.ui.emptyState("briefcase", "Sem dados", "Cadastre centros de custo para comparar o planejado com o realizado.")}
+              }) + FM.charts.legend([{ name: "Referência mensal", color: "#d96faa" }, { name: "Despesas pagas", color: "#e27c94" }]) : FM.ui.emptyState("briefcase", "Sem dados", "Cadastre centros de custo para comparar o planejado com o realizado.")}
             </div>
           </section>
           <section class="card">
@@ -594,8 +594,8 @@
           <section class="card">
             <div class="card-head"><div><div class="card-title">${icon("trending-up")}Resultado dos últimos 6 meses</div><div class="card-sub">Evolução do resultado realizado</div></div></div>
             <div class="card-body">
-              ${FM.charts.area({ labels: stats6.map((x) => x.label), series: [{ name: "Resultado", values: stats6.map((x) => x.resultado), color: "#b58cff", fill: true }], height: 236, zero: false })}
-              ${FM.charts.legend([{ name: "Resultado mensal", color: "#b58cff" }])}
+              ${FM.charts.area({ labels: stats6.map((x) => x.label), series: [{ name: "Resultado", values: stats6.map((x) => x.resultado), color: "#aa88cf", fill: true }], height: 236, zero: false })}
+              ${FM.charts.legend([{ name: "Resultado mensal", color: "#aa88cf" }])}
             </div>
           </section>
         </div>
@@ -930,14 +930,8 @@
           </section>
 
           <section class="card">
-            <div class="card-head"><div><div class="card-title">${icon("moon")}Aparência</div><div class="card-sub">Tema da interface neste navegador</div></div></div>
+            <div class="card-head"><div><div class="card-title">${icon("info")}Listas do sistema</div><div class="card-sub">Classificações automáticas dos lançamentos</div></div></div>
             <div class="card-body">
-              <div class="segmented" id="theme-seg">
-                <button type="button" data-theme="dark" class="${FM.store.theme() === "dark" ? "active" : ""}">${icon("moon")} Escuro</button>
-                <button type="button" data-theme="light" class="${FM.store.theme() === "light" ? "active" : ""}">${icon("sun")} Claro</button>
-              </div>
-              <p class="small muted mt-12">O tema escuro reduz o cansaço visual em uso prolongado. Relatórios impressos saem sempre em papel branco.</p>
-              <div class="subsection-title">Listas do sistema</div>
               <div class="small muted">Tipos de lançamento e status são calculados automaticamente e não podem ser alterados.</div>
               <div class="chip-list mt-8">
                 ${st().settings.types.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}
@@ -988,7 +982,7 @@
               </div>
               <div class="budget-card">
                 <div class="budget-card-head"><div><h4>Dados de demonstração</h4><span>Recomeçar com exemplo</span></div>${icon("refresh")}</div>
-                <p class="small muted">Substitui todo o conteúdo pelos dados fictícios do modelo, mantendo o tema.</p>
+                <p class="small muted">Substitui todo o conteúdo pelos dados fictícios do modelo.</p>
                 <button class="btn sm subtle" id="restore-demo">${icon("refresh")}Restaurar demonstração</button>
               </div>
             </div>
@@ -1010,11 +1004,11 @@
           </div>
         </section>
 
-        <section class="card mt-16" style="border-color:rgba(255,107,129,.3)">
+        <section class="card mt-16" style="border-color:rgba(204,88,114,.3)">
           <div class="card-head"><div><div class="card-title text-red">${icon("alert")}Zona de risco</div><div class="card-sub">Ações irreversíveis neste navegador</div></div></div>
           <div class="card-body">
             <div class="row between wrap">
-              <p class="small muted" style="max-width:520px">Apagar todos os dados remove contas, lançamentos, baixas, orçamentos e conciliações. O sistema volta vazio, mantendo apenas o tema escolhido. Exporte um backup antes.</p>
+              <p class="small muted" style="max-width:520px">Apagar todos os dados remove contas, lançamentos, baixas, orçamentos e conciliações. O sistema volta vazio. Exporte um backup antes.</p>
               <button class="btn sm danger" id="clear-all">${icon("trash")}Apagar todos os dados</button>
             </div>
           </div>
@@ -1026,14 +1020,6 @@
       const val = mount.querySelector("#org-input").value;
       FM.actions.updateOrg(val);
       FM.ui.toast("Nome da organização atualizado.");
-    });
-
-    mount.querySelectorAll("#theme-seg button").forEach((b) => {
-      b.addEventListener("click", () => {
-        FM.store.setTheme(b.dataset.theme);
-        mount.querySelectorAll("#theme-seg button").forEach((x) => x.classList.toggle("active", x === b));
-        FM.ui.toast(`Tema ${b.dataset.theme === "dark" ? "escuro" : "claro"} aplicado.`, "info");
-      });
     });
 
     ["methods", "periodicities"].forEach((kind) => {
@@ -1092,7 +1078,7 @@
     mount.querySelector("#restore-demo").addEventListener("click", async () => {
       const ok = await FM.ui.confirm({
         title: "Restaurar demonstração",
-        message: "Todos os dados atuais serão substituídos pelos dados fictícios do modelo. O tema é mantido. Deseja continuar?",
+        message: "Todos os dados atuais serão substituídos pelos dados fictícios do modelo. Deseja continuar?",
         confirmLabel: "Restaurar",
         danger: true,
       });

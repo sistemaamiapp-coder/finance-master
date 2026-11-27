@@ -72,25 +72,6 @@
       recEl.title = `${rec.count} em aberto · ${money(rec.total)}`;
     }
 
-    const theme = FM.store.theme();
-    [["#theme-toggle", "toggle"], ["#sidebar-theme", "sidebar"]].forEach(([sel]) => {
-      const btn = $(sel);
-      if (!btn) return;
-      const use = btn.querySelector("use");
-      if (use) use.setAttribute("href", theme === "dark" ? "#i-sun" : "#i-moon");
-      btn.title = theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro";
-      btn.setAttribute("aria-label", btn.title);
-    });
-
-    const light = theme === "light";
-    const iconSet = light ? "luvis-finance-light" : "luvis-finance";
-    const fav = $("#favicon");
-    if (fav) fav.href = `assets/img/${iconSet}-64.png`;
-    const apple = $("#apple-icon");
-    if (apple) apple.href = `assets/img/${iconSet}-192.png`;
-    const themeColor = document.querySelector('meta[name="theme-color"]');
-    if (themeColor) themeColor.setAttribute("content", light ? "#f2f5fb" : "#090e1c");
-
     const footer = $("#footer-date");
     if (footer) {
       const text = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
@@ -170,13 +151,6 @@
     document.querySelectorAll(".nav-item").forEach((a) => a.addEventListener("click", closeSidebar));
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") closeSidebar();
-    });
-  }
-
-  function bindTheme() {
-    ["#theme-toggle", "#sidebar-theme"].forEach((sel) => {
-      const btn = $(sel);
-      if (btn) btn.addEventListener("click", () => FM.store.toggleTheme());
     });
   }
 
@@ -325,7 +299,6 @@
   function init() {
     FM.store.init();
     bindSidebar();
-    bindTheme();
     bindPeriod();
     bindSearch();
     bindActions();

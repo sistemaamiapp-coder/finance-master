@@ -148,19 +148,19 @@
             <div class="kpi-head"><span class="kpi-label">Saldo consolidado</span><span class="kpi-icon green">${icon("wallet")}</span></div>
             <div class="kpi-value ${cash < 0 ? "neg" : ""}">${money(cash)}</div>
             <div class="kpi-foot"><span>${st.accounts.length} conta(s) · inclui transferências</span></div>
-            ${FM.charts.spark(sparkSaldo, "#2ed3a0")}
+            ${FM.charts.spark(sparkSaldo, "#48ad8c")}
           </article>
           <article class="kpi">
             <div class="kpi-head"><span class="kpi-label">Receitas recebidas</span><span class="kpi-icon green">${icon("arrow-up")}</span></div>
             <div class="kpi-value">${money(s.receitasRecebidas)}</div>
             <div class="kpi-foot">${delta(s.receitasRecebidas, prev.receitasRecebidas, true)}<span>vs. mês anterior</span></div>
-            ${FM.charts.spark(sparkRec, "#2ed3a0")}
+            ${FM.charts.spark(sparkRec, "#48ad8c")}
           </article>
           <article class="kpi">
             <div class="kpi-head"><span class="kpi-label">Despesas pagas</span><span class="kpi-icon red">${icon("arrow-down")}</span></div>
             <div class="kpi-value">${money(s.despesasPagas)}</div>
             <div class="kpi-foot">${delta(s.despesasPagas, prev.despesasPagas, false)}<span>vs. mês anterior</span></div>
-            ${FM.charts.spark(sparkDesp, "#ff6b81")}
+            ${FM.charts.spark(sparkDesp, "#e27c94")}
           </article>
           <article class="kpi">
             <div class="kpi-head"><span class="kpi-label">Resultado realizado</span><span class="kpi-icon ${s.resultado >= 0 ? "green" : "red"}">${icon(s.resultado >= 0 ? "trending-up" : "trending-down")}</span></div>
@@ -176,8 +176,8 @@
               <a class="card-link" href="#/fluxo-caixa">Fluxo completo ${icon("arrow-right")}</a>
             </div>
             <div class="card-body">
-              ${FM.charts.area({ labels: stats.map((x) => x.label), series: [{ name: "Saldo final", values: sparkSaldo, color: "#2ed3a0" }], height: 236, zero: false, format: moneyShort })}
-              ${FM.charts.legend([{ name: "Saldo final realizado", color: "#2ed3a0" }])}
+              ${FM.charts.area({ labels: stats.map((x) => x.label), series: [{ name: "Saldo final", values: sparkSaldo, color: "#48ad8c" }], height: 236, zero: false, format: moneyShort })}
+              ${FM.charts.legend([{ name: "Saldo final realizado", color: "#48ad8c" }])}
             </div>
           </section>
 
@@ -260,12 +260,12 @@
               ${FM.charts.bars({
                 labels: stats.map((x) => x.label),
                 series: [
-                  { name: "Receitas", values: stats.map((x) => x.receitasRecebidas), color: "#2ed3a0" },
-                  { name: "Despesas", values: stats.map((x) => x.despesasPagas), color: "#ff6b81" },
+                  { name: "Receitas", values: stats.map((x) => x.receitasRecebidas), color: "#48ad8c" },
+                  { name: "Despesas", values: stats.map((x) => x.despesasPagas), color: "#e27c94" },
                 ],
                 height: 220,
               })}
-              ${FM.charts.legend([{ name: "Receitas recebidas", color: "#2ed3a0" }, { name: "Despesas pagas", color: "#ff6b81" }])}
+              ${FM.charts.legend([{ name: "Receitas recebidas", color: "#48ad8c" }, { name: "Despesas pagas", color: "#e27c94" }])}
             </div>
           </section>
 

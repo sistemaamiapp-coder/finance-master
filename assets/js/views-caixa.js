@@ -266,13 +266,13 @@
             <div class="card-body">
               ${FM.charts.area({
                 labels: stats.map((s) => s.label),
-                series: [{ name: "Saldo de caixa", values: keys.map((k) => projMap[k]), color: "#7c8cff", dot: true }],
+                series: [{ name: "Saldo de caixa", values: keys.map((k) => projMap[k]), color: "#d96faa", dot: true }],
                 height: 250,
                 zero: false,
               })}
               ${FM.charts.legend([
-                { name: "Saldo realizado / projetado", color: "#7c8cff" },
-                { name: minProj < 0 ? "Atenção: projeção negativa" : "Projeção positiva", color: minProj < 0 ? "#ff6b81" : "#2ed3a0" },
+                { name: "Saldo realizado / projetado", color: "#d96faa" },
+                { name: minProj < 0 ? "Atenção: projeção negativa" : "Projeção positiva", color: minProj < 0 ? "#e27c94" : "#48ad8c" },
               ])}
             </div>
           </section>
@@ -283,12 +283,12 @@
               ${FM.charts.bars({
                 labels: stats.map((s) => s.label),
                 series: [
-                  { name: "Receitas", values: stats.map((s) => s.receitasRecebidas), color: "#2ed3a0" },
-                  { name: "Despesas", values: stats.map((s) => s.despesasPagas), color: "#ff6b81" },
+                  { name: "Receitas", values: stats.map((s) => s.receitasRecebidas), color: "#48ad8c" },
+                  { name: "Despesas", values: stats.map((s) => s.despesasPagas), color: "#e27c94" },
                 ],
                 height: 250,
               })}
-              ${FM.charts.legend([{ name: "Receitas recebidas", color: "#2ed3a0" }, { name: "Despesas pagas", color: "#ff6b81" }])}
+              ${FM.charts.legend([{ name: "Receitas recebidas", color: "#48ad8c" }, { name: "Despesas pagas", color: "#e27c94" }])}
             </div>
           </section>
         </div>

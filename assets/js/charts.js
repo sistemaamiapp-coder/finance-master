@@ -7,7 +7,7 @@
   const U = FM.utils;
   const { num, money, moneyShort, pct, esc } = U;
 
-  const palette = ["#7c8cff", "#2ed3a0", "#55d6f5", "#ffc45c", "#b58cff", "#ff6b81", "#ff8fb1", "#45e0c8", "#9aa7ff"];
+  const palette = ["#d96faa", "#48ad8c", "#79b9cc", "#e0ad57", "#aa88cf", "#e27c94", "#eaa0c0", "#76c4b4", "#a9a0dd"];
   let uidc = 0;
   const uid = (p) => `c${p}${++uidc}`;
 
